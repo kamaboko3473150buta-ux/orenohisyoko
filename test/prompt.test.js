@@ -84,5 +84,25 @@ test('署名が空なら本文だけを返す', () => {
 
 test('本文末尾の余分な改行は整理される', () => {
   const r = appendSignature('本文です。\n\n\n', '署名');
-  assert.ok(!r.includes('\n\n\n'), '3連続の改行が残らない');
+  assert.strictEqual(r, `本文です。\n\n${'-'.repeat(30)}\n署名`);
+});
+
+test('appendSignatureの第1引数がnull/undefinedでも落ちず、署名だけが返る', () => {
+  assert.strictEqual(appendSignature(null, '署名'), '署名');
+  assert.strictEqual(appendSignature(undefined, '署名'), '署名');
+});
+
+test('部署だけで氏名が無いとき、人物用の敬称（様）は付かない', () => {
+  const r = buildAddressBlock({ department: '営業部', honorific: '様' });
+  assert.strictEqual(r, '営業部');
+});
+
+test('部署だけで氏名が無いとき、御中は付く', () => {
+  const r = buildAddressBlock({ department: '営業部', honorific: '御中' });
+  assert.strictEqual(r, '営業部 御中');
+});
+
+test('会社名＋部署で氏名が無いとき、会社名は別行・部署に御中が付く', () => {
+  const r = buildAddressBlock({ company: '株式会社○○', department: '営業部', honorific: '御中' });
+  assert.strictEqual(r, '株式会社○○\n営業部 御中');
 });

@@ -8,22 +8,27 @@ function clean(v) {
 }
 
 // 宛名ブロックを作る。
-// 会社名は独立した行、部署と氏名は同じ行。敬称は「氏名がある行」の末尾に付ける。
-// 氏名も部署も無いときは会社名の行に敬称を付ける（例: 株式会社○○ 御中）。
+// 会社名は独立した行、部署と氏名は同じ行。
+// 敬称は氏名があるときだけ付ける（様・御中・先生など、選ばれたものをそのまま）。
+// 氏名が無いときは、人物用の敬称を部署や会社名に付けると不自然になるため、
+// 「御中」が選ばれているときだけ、最終行（部署があれば部署、無ければ会社名）に付ける。
 function buildAddressBlock({ company, department, name, honorific } = {}) {
   const co = clean(company);
   const dept = clean(department);
   const nm = clean(name);
   const hon = clean(honorific);
 
-  const personLine = [dept, nm].filter(Boolean).join(' ');
   const lines = [];
 
-  if (personLine) {
+  if (nm) {
+    const personLine = [dept, nm].filter(Boolean).join(' ');
     if (co) lines.push(co);
     lines.push(hon ? `${personLine} ${hon}` : personLine);
-  } else if (co) {
-    lines.push(hon ? `${co} ${hon}` : co);
+  } else {
+    const last = dept || co;
+    if (!last) return '';
+    if (co && dept) lines.push(co);
+    lines.push(hon === '御中' ? `${last} 御中` : last);
   }
   return lines.join('\n');
 }
@@ -73,10 +78,12 @@ function buildUserPrompt({ sceneId, toneId, recipient, subject, memo } = {}) {
 const SIGNATURE_SEPARATOR = `\n\n${'-'.repeat(30)}\n`;
 
 // 本文の末尾に署名を連結する。署名が空なら本文をそのまま返す。
+// 本文が空（null/undefinedを含む）なら、区切り線を付けず署名だけを返す。
 function appendSignature(body, signature) {
   const b = String(body == null ? '' : body).replace(/\s+$/, '');
   const s = clean(signature);
   if (!s) return b;
+  if (!b) return s;
   return b + SIGNATURE_SEPARATOR + s;
 }
 
