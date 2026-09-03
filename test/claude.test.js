@@ -58,3 +58,28 @@ test('テキストブロックが無ければ空文字', () => {
   assert.strictEqual(extractText({ content: [] }), '');
   assert.strictEqual(extractText({}), '');
 });
+
+test('SDKと同じ形の例外（nameを設定しないクラス）でも接続エラーとして分類される', () => {
+  class APIConnectionError extends Error {}
+  const err = new APIConnectionError('x');
+  assert.strictEqual(err.name, 'Error');
+  assert.strictEqual(err.constructor.name, 'APIConnectionError');
+  assert.strictEqual(classifyError(err).code, 'network');
+});
+
+test('SDKと同じ形の例外（nameを設定しないクラス）でもタイムアウトとして分類される', () => {
+  class APIConnectionTimeoutError extends Error {}
+  const err = new APIConnectionTimeoutError('x');
+  assert.strictEqual(err.name, 'Error');
+  assert.strictEqual(err.constructor.name, 'APIConnectionTimeoutError');
+  assert.strictEqual(classifyError(err).code, 'timeout');
+});
+
+test('err.cause.codeにENOTFOUNDがあるときnetworkになる', () => {
+  const err = Object.assign(new Error('x'), { cause: { code: 'ENOTFOUND' } });
+  assert.strictEqual(classifyError(err).code, 'network');
+});
+
+test('extractTextはcontentが配列でない（例: 文字列）とき空文字を返し、例外を投げない', () => {
+  assert.strictEqual(extractText({ content: 'not an array' }), '');
+});
