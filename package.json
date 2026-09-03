@@ -5,7 +5,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/",
+    "test": "node --test",
     "build": "electron-builder",
     "postinstall": "node scripts/fix-electron-win.js",
     "fix-electron": "node scripts/fix-electron-win.js"
