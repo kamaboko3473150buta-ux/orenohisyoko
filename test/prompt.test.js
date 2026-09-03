@@ -66,3 +66,23 @@ test('存在しない場面IDでも落ちずにその他として扱う', () => 
   assert.ok(p.includes('その他'), 'その他になる');
   assert.ok(p.includes('かしこまった社外向け'), '既定の文体になる');
 });
+
+const { appendSignature } = require('../src/main/mail-compose/prompt');
+
+test('署名が本文の末尾に区切り線付きで1回だけ付く', () => {
+  const r = appendSignature('本文です。', '株式会社△△\n松原 太郎');
+  assert.ok(r.startsWith('本文です。'), '本文が先頭にある');
+  assert.ok(r.endsWith('株式会社△△\n松原 太郎'), '署名が末尾にある');
+  assert.strictEqual(r.split('松原 太郎').length - 1, 1, '署名は1回だけ');
+});
+
+test('署名が空なら本文だけを返す', () => {
+  assert.strictEqual(appendSignature('本文です。', ''), '本文です。');
+  assert.strictEqual(appendSignature('本文です。', '   '), '本文です。');
+  assert.strictEqual(appendSignature('本文です。', undefined), '本文です。');
+});
+
+test('本文末尾の余分な改行は整理される', () => {
+  const r = appendSignature('本文です。\n\n\n', '署名');
+  assert.ok(!r.includes('\n\n\n'), '3連続の改行が残らない');
+});

@@ -70,4 +70,14 @@ function buildUserPrompt({ sceneId, toneId, recipient, subject, memo } = {}) {
   ].join('\n');
 }
 
-module.exports = { buildAddressBlock, buildSystemPrompt, buildUserPrompt };
+const SIGNATURE_SEPARATOR = `\n\n${'-'.repeat(30)}\n`;
+
+// 本文の末尾に署名を連結する。署名が空なら本文をそのまま返す。
+function appendSignature(body, signature) {
+  const b = String(body == null ? '' : body).replace(/\s+$/, '');
+  const s = clean(signature);
+  if (!s) return b;
+  return b + SIGNATURE_SEPARATOR + s;
+}
+
+module.exports = { buildAddressBlock, buildSystemPrompt, buildUserPrompt, appendSignature };
