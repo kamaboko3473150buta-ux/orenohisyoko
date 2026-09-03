@@ -1,0 +1,49 @@
+{
+  "name": "ore-no-hishoko",
+  "version": "0.1.0",
+  "description": "汎用業務能率化アプリ。第1機能はClaude APIによるメール文面作成。",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/",
+    "build": "electron-builder",
+    "postinstall": "node scripts/fix-electron-win.js",
+    "fix-electron": "node scripts/fix-electron-win.js"
+  },
+  "license": "UNLICENSED",
+  "build": {
+    "appId": "com.local.orenohishoko",
+    "productName": "俺の秘書子",
+    "files": [
+      "electron/**",
+      "src/**",
+      "assets/icon.ico",
+      "node_modules/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/draft-outlook.ps1"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "俺の秘書子"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  }
+}
