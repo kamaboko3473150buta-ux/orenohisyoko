@@ -27,7 +27,9 @@ function escapeHtml(s) {
 
 // Outlook の HTMLBody に渡すための簡単な HTML に変換する。
 function textToHtml(text) {
-  const body = escapeHtml(text).replace(/\n/g, '<br>\n');
+  // \r\n と \r を \n に正規化してから <br> に変換する（\r が本文に残らないように）。
+  const normalized = escapeHtml(text).replace(/\r\n|\r/g, '\n');
+  const body = normalized.replace(/\n/g, '<br>\n');
   return `<div style="font-family:'游ゴシック',sans-serif;font-size:11pt;">${body}</div>`;
 }
 
@@ -35,11 +37,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
+const { randomUUID } = require('node:crypto');
 
 // パッケージ後(.exe)は __dirname が app.asar 内を指す。PowerShell は asar 内のファイルを
 // 実行できないため、asarUnpack で実体化した app.asar.unpacked 側を参照する。
-function resolveScriptPath() {
-  let ps1 = path.join(__dirname, 'draft-outlook.ps1');
+// baseDir を引数で受け取れるようにして、パッケージ後の状態をテストから再現できるようにする。
+function resolveScriptPath(baseDir = __dirname) {
+  let ps1 = path.join(baseDir, 'draft-outlook.ps1');
   if (ps1.includes(`app.asar${path.sep}`)) {
     ps1 = ps1.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
   }
@@ -48,8 +52,10 @@ function resolveScriptPath() {
 
 // Outlook の新規メールウィンドウを開く。成功なら { ok: true }。
 async function openOutlookDraft({ to, subject, body }) {
-  const jobPath = path.join(os.tmpdir(), `hishoko-draft-${Date.now()}.json`);
-  fs.writeFileSync(jobPath, JSON.stringify({ to, subject, html: textToHtml(body) }), 'utf8');
+  // process.pid とランダムなUUIDを足して一意にする。連打などで同時に呼ばれても
+  // ファイル名が衝突して別の宛先・本文の下書きが開いたり、読み取り中に消してしまう競合を防ぐ。
+  const jobPath = path.join(os.tmpdir(), `hishoko-draft-${process.pid}-${randomUUID()}.json`);
+  fs.writeFileSync(jobPath, JSON.stringify({ to: to || '', subject: subject || '', html: textToHtml(body) }), 'utf8');
 
   try {
     await new Promise((resolve, reject) => {
@@ -70,5 +76,5 @@ async function openOutlookDraft({ to, subject, body }) {
 }
 
 module.exports = {
-  GMAIL_URL_LIMIT, buildGmailUrl, isUrlTooLong, escapeHtml, textToHtml, openOutlookDraft,
+  GMAIL_URL_LIMIT, buildGmailUrl, isUrlTooLong, escapeHtml, textToHtml, openOutlookDraft, resolveScriptPath,
 };

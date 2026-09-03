@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildGmailUrl, isUrlTooLong, textToHtml, GMAIL_URL_LIMIT } = require('../src/main/mail-compose/draft');
+const path = require('node:path');
+const { buildGmailUrl, isUrlTooLong, textToHtml, GMAIL_URL_LIMIT, resolveScriptPath } = require('../src/main/mail-compose/draft');
 
 test('Gmailの新規作成URLが組み立てられる', () => {
   const url = buildGmailUrl({ to: 'a@example.com', subject: '御礼', body: 'こんにちは' });
@@ -37,4 +38,27 @@ test('HTMLの特殊文字がエスケープされる', () => {
   assert.ok(!html.includes('<script>'), 'scriptタグがそのまま残らない');
   assert.ok(html.includes('&lt;script&gt;'), 'エスケープされている');
   assert.ok(html.includes('&amp;'), 'アンパサンドがエスケープされている');
+});
+
+test('ちょうど上限の長さのURLは長すぎと判定されない', () => {
+  assert.strictEqual(isUrlTooLong('a'.repeat(GMAIL_URL_LIMIT)), false);
+});
+
+test('to/subjectが未指定でもundefinedという文字列が混ざらない', () => {
+  const url = buildGmailUrl({});
+  assert.ok(!url.includes('undefined'), 'undefined文字列が含まれない');
+});
+
+test('resolveScriptPathは通常時はdraft-outlook.ps1で終わるパスを返す', () => {
+  const baseDir = path.join('C:', 'app', 'src', 'main', 'mail-compose');
+  const result = resolveScriptPath(baseDir);
+  assert.ok(result.endsWith('draft-outlook.ps1'), 'ps1で終わる');
+  assert.ok(!result.includes('app.asar'), 'app.asarを含まない');
+});
+
+test('resolveScriptPathはapp.asarをapp.asar.unpackedへ置き換える', () => {
+  const baseDir = path.join('C:', 'app', 'resources', 'app.asar', 'src', 'main', 'mail-compose');
+  const result = resolveScriptPath(baseDir);
+  assert.ok(result.includes(`app.asar.unpacked${path.sep}`), 'app.asar.unpackedへ置き換わる');
+  assert.ok(!result.includes(`app.asar${path.sep}src`), '元のapp.asarのままではない');
 });
