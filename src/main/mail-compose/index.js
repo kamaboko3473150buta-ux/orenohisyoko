@@ -8,8 +8,9 @@ const { buildSystemPrompt, buildUserPrompt, appendSignature } = require('./promp
 const { buildGmailUrl, isUrlTooLong, openOutlookDraft } = require('./draft');
 const { generateBody } = require('../claude');
 const { upsertContact, addHistory } = require('../store');
+const { addUsage } = require('../usage');
 
-function register({ getSettings, getContacts, saveContacts, getHistory, saveHistory }) {
+function register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage }) {
   // 場面・文体の一覧を画面に渡す
   ipcMain.handle('mail:meta', () => ({ scenes: SCENES, tones: TONES }));
 
@@ -31,7 +32,7 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
 
     const body = appendSignature(result.body, settings.signature);
 
-    // 宛先と文面を履歴に残す
+    // 宛先と文面を履歴に残し、利用状況（トークン数）を記録する
     const now = new Date().toISOString();
     saveContacts(upsertContact(getContacts(), input.recipient || {}, now));
     saveHistory(addHistory(getHistory(), {
@@ -39,6 +40,7 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
       to: (input.recipient && input.recipient.email) || '',
       subject: input.subject, body, createdAt: now,
     }));
+    saveUsage(addUsage(getUsage(), result.usage, now));
 
     return { ok: true, body };
   });

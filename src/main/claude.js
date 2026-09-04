@@ -83,7 +83,12 @@ async function generateBody({ apiKey, system, user }) {
     if (!body) {
       return { ok: false, code: 'empty', message: '文面が空で返ってきました。もう一度お試しください。' };
     }
-    return { ok: true, body };
+    // 利用状況の記録（Task 19）に使う。無ければ0（SDKのレスポンス形式が変わった場合の保険）。
+    const usage = {
+      inputTokens: (res.usage && res.usage.input_tokens) || 0,
+      outputTokens: (res.usage && res.usage.output_tokens) || 0,
+    };
+    return { ok: true, body, usage };
   } catch (err) {
     const info = classifyError(err);
     return { ok: false, ...info };

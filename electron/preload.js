@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('hishoko', {
   clearContacts: () => ipcRenderer.invoke('settings:clearContacts'),
   clearHistory: () => ipcRenderer.invoke('settings:clearHistory'),
 
+  // API利用状況
+  getUsage: () => ipcRenderer.invoke('usage:get'),
+  clearUsage: () => ipcRenderer.invoke('usage:clear'),
+
   // メール文面作成
   mailMeta: () => ipcRenderer.invoke('mail:meta'),
   mailContacts: () => ipcRenderer.invoke('mail:contacts'),

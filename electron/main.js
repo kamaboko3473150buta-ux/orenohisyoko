@@ -4,6 +4,7 @@ const { app, BrowserWindow, ipcMain, safeStorage } = require('electron');
 const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
+const { summarize } = require('../src/main/usage');
 const mailCompose = require('../src/main/mail-compose');
 
 // 保存先を明示的に固定する（productNameが日本語でもフォルダ名を英字に保つため）
@@ -31,6 +32,8 @@ const getContacts = () => readJson(PATHS.contacts, []);
 const saveContacts = (list) => writeJson(PATHS.contacts, list);
 const getHistory = () => readJson(PATHS.history, []);
 const saveHistory = (list) => writeJson(PATHS.history, list);
+const getUsage = () => readJson(PATHS.usage, {});
+const saveUsage = (store) => writeJson(PATHS.usage, store);
 
 function registerCommonHandlers() {
   // 画面にはAPIキーそのものを渡さない。設定済みかどうかだけ伝える。
@@ -64,11 +67,15 @@ function registerCommonHandlers() {
 
   ipcMain.handle('settings:clearContacts', () => { saveContacts([]); return { ok: true }; });
   ipcMain.handle('settings:clearHistory', () => { saveHistory([]); return { ok: true }; });
+
+  // API利用状況（Task 19）。金額はこのアプリでの利用実績からの概算。
+  ipcMain.handle('usage:get', () => summarize(getUsage()));
+  ipcMain.handle('usage:clear', () => { saveUsage({}); return { ok: true }; });
 }
 
 app.whenReady().then(() => {
   registerCommonHandlers();
-  mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory });
+  mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage });
   createWindow();
 
   app.on('activate', () => {
