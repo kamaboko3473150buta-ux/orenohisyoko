@@ -54,6 +54,7 @@ Views.reply = {
       errorEl.hidden = true;
       submit.disabled = true;
       submit.textContent = '作成中…（10秒ほどかかります）';
+      Hishoko.say('thinking', '文面を考えています…');
 
       const res = await window.hishoko.mailGenerateReply({
         toneId: f.toneId, received: f.received, memo: f.memo,
@@ -65,6 +66,7 @@ Views.reply = {
       if (!res.ok) {
         errorEl.textContent = res.message;
         errorEl.hidden = false;
+        Hishoko.say('trouble', res.message);
         if (res.code === 'no_key' || res.code === 'auth') App.go('settings');
         return;
       }

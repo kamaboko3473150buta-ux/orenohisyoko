@@ -8,6 +8,9 @@ Views.preview = {
     // 返信は下書きを開かず「コピー」で完結する。宛先・件名も無いので出さない。
     const isReply = r.mode === 'reply';
 
+    // ここに来られるのは文面の生成に成功したとき（失敗時はcompose/replyから動かない）。
+    Hishoko.say('smile', 'できました。確認してくださいね');
+
     const subject = App.h('input', { type: 'text', value: r.subject });
     const body = App.h('textarea', { class: 'preview-body' });
     body.value = r.body;
