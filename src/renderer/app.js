@@ -12,7 +12,26 @@ const App = {
     if (!opts.replace) this.history.push(viewName);
     this.backBtn.hidden = this.history.length <= 1;
     this.el.innerHTML = '';
-    Views[viewName].render(this.el);
+
+    // 画面によっては render が非同期（設定や履歴の読み込みを待つ）。
+    // 待っている間に別画面へ移ると、古い画面の要素が今の画面に紛れ込んでしまう。
+    // そこで、いったん画面から切り離した器に描き、描き終わった時点で
+    // まだ自分が最新の画面なら本体に差し込む。古くなっていたら捨てる。
+    this.generation = (this.generation || 0) + 1;
+    const myGeneration = this.generation;
+    const buffer = document.createElement('div');
+
+    Promise.resolve(Views[viewName].render(buffer))
+      .then(() => {
+        if (myGeneration !== this.generation) return; // すでに別の画面に移っている
+        this.el.appendChild(buffer);
+      })
+      .catch((err) => {
+        if (myGeneration !== this.generation) return;
+        this.el.appendChild(this.h('div', { class: 'card' }, [
+          this.h('div', { class: 'error', text: `画面の表示に失敗しました: ${err.message}` }),
+        ]));
+      });
   },
 
   back() {
