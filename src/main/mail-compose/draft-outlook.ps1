@@ -1,4 +1,4 @@
-# src/main/mail-compose/draft-outlook.ps1
+﻿# src/main/mail-compose/draft-outlook.ps1
 # Outlook COM で新規メールを作り、宛先・件名・本文をセットして「表示」する。
 # 送信は絶対に行わない（.Send() を呼ばない）。
 param(
