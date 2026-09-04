@@ -76,10 +76,15 @@ function buildSystemPrompt() {
 }
 
 // 実際の依頼内容。場面・文体の guide をここに展開する。
-function buildUserPrompt({ sceneId, toneId, recipient, subject, memo } = {}) {
+// recipients（To の相手の配列）が渡されたときは buildAddressBlockMulti を使う
+// （複数宛先で「各位」になる場合を扱うため）。渡されなければ recipient 単体のまま、
+// これまでどおり buildAddressBlock を使う（1件送信時の後方互換）。
+function buildUserPrompt({
+  sceneId, toneId, recipient, recipients, subject, memo,
+} = {}) {
   const scene = findScene(sceneId);
   const tone = findTone(toneId);
-  const address = buildAddressBlock(recipient || {});
+  const address = Array.isArray(recipients) ? buildAddressBlockMulti(recipients) : buildAddressBlock(recipient || {});
 
   return [
     `【場面】${scene.label}`,

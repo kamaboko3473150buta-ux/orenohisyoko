@@ -210,6 +210,32 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 }
 .chip.selected:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
+/* --- 宛先のchip（複数選択。会社名/氏名の他にTo/CC/BCCの切り替えと削除ボタンを持つ） --- */
+
+.recipient-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+.recipient-chip:hover { border-color: var(--line); background: #fff; }
+.recipient-chip select {
+  width: auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+.chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chip-remove:hover { color: var(--danger); background: transparent; }
+
 /* --- 補助テキスト --- */
 
 .actions {

@@ -15,7 +15,6 @@ contextBridge.exposeInMainWorld('hishoko', {
 
   // メール文面作成
   mailMeta: () => ipcRenderer.invoke('mail:meta'),
-  mailContacts: () => ipcRenderer.invoke('mail:contacts'),
   mailHistory: () => ipcRenderer.invoke('mail:history'),
   mailGenerate: (input) => ipcRenderer.invoke('mail:generate', input),
   mailGenerateReply: (input) => ipcRenderer.invoke('mail:generateReply', input),

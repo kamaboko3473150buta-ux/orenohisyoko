@@ -14,13 +14,24 @@ const bookLib = require('../contacts');
 const { addHistory } = require('../store');
 const { addUsage } = require('../usage');
 
+// mail:generate の入力を { email, company, department, name, honorific, field } の配列に揃える。
+// 新形式は input.recipients。旧形式（単一の input.recipient、field指定なし＝to扱い）も
+// 引き続き受け付ける（既存の1件だけの宛先での動線を壊さないため）。
+function normalizeRecipients(input) {
+  if (Array.isArray(input && input.recipients) && input.recipients.length) {
+    return input.recipients.map((r) => ({ ...r, field: (r && r.field) || 'to' }));
+  }
+  if (input && input.recipient) return [{ ...input.recipient, field: 'to' }];
+  return [];
+}
+
+function emailsOf(recipients, field) {
+  return recipients.filter((r) => r.field === field).map((r) => String(r.email || '').trim()).filter(Boolean);
+}
+
 function register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage }) {
   // 場面・文体の一覧を画面に渡す
   ipcMain.handle('mail:meta', () => ({ scenes: SCENES, tones: TONES }));
-
-  // 宛先履歴を画面に渡す。getContacts()はアドレス帳（{version,contacts,groups}）を返すため、
-  // 従来どおり配列を期待する呼び出し側（compose.jsの「履歴から選ぶ」）に合わせて contacts だけ渡す。
-  ipcMain.handle('mail:contacts', () => getContacts().contacts);
 
   // 文面履歴を画面に渡す
   ipcMain.handle('mail:history', () => getHistory());
@@ -58,23 +69,27 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
   // 文面を作る
   ipcMain.handle('mail:generate', async (_e, input) => {
     const settings = getSettings();
+    const recipients = normalizeRecipients(input);
+    const toRecipients = recipients.filter((r) => r.field === 'to');
+
     const result = await generateBody({
       apiKey: settings.apiKey,
       system: buildSystemPrompt(),
-      user: buildUserPrompt(input),
+      user: buildUserPrompt({ ...input, recipients: toRecipients }),
     });
     if (!result.ok) return result;
 
     const body = appendSignature(result.body, settings.signature);
 
-    // 宛先と文面を履歴に残し、利用状況（トークン数）を記録する。
-    // 宛先はアドレス帳（contacts.json）に upsert する（本タスクからは配列ではなく
-    // { version:2, contacts, groups } 形式のため、store.js ではなく contacts.js を使う）。
+    // 選んだ全員（To/CC/BCCすべて）をアドレス帳に upsert し、文面履歴・利用状況を記録する
     const now = new Date().toISOString();
-    saveContacts(bookLib.upsertContact(getContacts(), input.recipient || {}, now));
+    let book = getContacts();
+    recipients.forEach((r) => { book = bookLib.upsertContact(book, r, now); });
+    saveContacts(book);
+
     saveHistory(addHistory(getHistory(), {
       id: now, scene: input.sceneId, tone: input.toneId,
-      to: (input.recipient && input.recipient.email) || '',
+      to: emailsOf(recipients, 'to').join('; '),
       subject: input.subject, body, createdAt: now,
     }));
     saveUsage(addUsage(getUsage(), result.usage, now));
@@ -106,17 +121,27 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
   });
 
   // Outlook の下書きを開く
-  ipcMain.handle('mail:openOutlook', async (_e, { to, subject, body }) => openOutlookDraft({ to, subject, body }));
+  ipcMain.handle('mail:openOutlook', async (_e, {
+    to, cc, bcc, subject, body,
+  }) => openOutlookDraft({
+    to, cc, bcc, subject, body,
+  }));
 
   // Gmail の作成画面を開く。長すぎるときは本文をクリップボードへ
-  ipcMain.handle('mail:openGmail', async (_e, { to, subject, body }) => {
-    const full = buildGmailUrl({ to, subject, body });
+  ipcMain.handle('mail:openGmail', async (_e, {
+    to, cc, bcc, subject, body,
+  }) => {
+    const full = buildGmailUrl({
+      to, cc, bcc, subject, body,
+    });
     if (!isUrlTooLong(full)) {
       await shell.openExternal(full);
       return { ok: true, copiedToClipboard: false };
     }
     clipboard.writeText(body);
-    await shell.openExternal(buildGmailUrl({ to, subject, body: '' }));
+    await shell.openExternal(buildGmailUrl({
+      to, cc, bcc, subject, body: '',
+    }));
     return { ok: true, copiedToClipboard: true };
   });
 

@@ -11,6 +11,9 @@ Views.preview = {
     // ここに来られるのは文面の生成に成功したとき（失敗時はcompose/replyから動かない）。
     Hishoko.say('smile', 'できました。確認してくださいね');
 
+    // to/cc/bccは配列（複数宛先）でも文字列（履歴・返信から開いた場合）でも来る
+    const joinAddr = (v) => (Array.isArray(v) ? v.filter(Boolean).join('; ') : (v || ''));
+
     const subject = App.h('input', { type: 'text', value: r.subject });
     const body = App.h('textarea', { class: 'preview-body' });
     body.value = r.body;
@@ -22,7 +25,13 @@ Views.preview = {
 
     const fields = [];
     if (!isReply) {
-      fields.push(App.h('div', { class: 'field' }, [App.h('label', { text: '宛先' }), App.h('div', { class: 'status', text: r.to })]));
+      fields.push(App.h('div', { class: 'field' }, [App.h('label', { text: '宛先' }), App.h('div', { class: 'status', text: joinAddr(r.to) })]));
+      if (joinAddr(r.cc)) {
+        fields.push(App.h('div', { class: 'field' }, [App.h('label', { text: 'CC' }), App.h('div', { class: 'status', text: joinAddr(r.cc) })]));
+      }
+      if (joinAddr(r.bcc)) {
+        fields.push(App.h('div', { class: 'field' }, [App.h('label', { text: 'BCC' }), App.h('div', { class: 'status', text: joinAddr(r.bcc) })]));
+      }
       fields.push(App.h('div', { class: 'field' }, [App.h('label', { text: '件名' }), subject]));
     }
     fields.push(App.h('div', { class: 'field' }, [App.h('label', { text: '本文（編集できます）' }), body]));
@@ -33,7 +42,9 @@ Views.preview = {
       App.h('div', { class: 'actions' }, isReply ? [regenBtn, copyBtn] : [regenBtn, copyBtn, openBtn]),
     ]));
 
-    const current = () => ({ to: r.to, subject: subject.value, body: body.value });
+    const current = () => ({
+      to: r.to, cc: r.cc, bcc: r.bcc, subject: subject.value, body: body.value,
+    });
 
     copyBtn.addEventListener('click', async () => {
       await window.hishoko.mailCopy(current());

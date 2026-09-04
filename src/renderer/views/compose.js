@@ -6,14 +6,14 @@ Views.compose = {
     App.setTitle('メール文面作成');
     const meta = await window.hishoko.mailMeta();
     const settings = await window.hishoko.getSettings();
-    const contacts = await window.hishoko.mailContacts();
+    const book = await window.hishoko.bookGet();
 
     // 前回の入力があれば引き継ぐ（プレビューから戻ってきたとき）
     const f = App.state.form || {
       sceneId: 'thanks',
       toneId: settings.defaultTone,
       mailer: settings.defaultMailer,
-      recipient: { company: '', department: '', name: '', honorific: '様', email: '' },
+      recipients: [], // { company, department, name, honorific, email, field: 'to'|'cc'|'bcc' } の配列
       subject: '',
       memo: '',
     };
@@ -38,53 +38,187 @@ Views.compose = {
     ]));
 
     // ② 宛先
-    const mkInput = (key, label, hint, type = 'text') => {
-      const input = App.h('input', { type, value: f.recipient[key] || '' });
-      input.addEventListener('input', () => { f.recipient[key] = input.value; });
-      const lab = App.h('label', { text: label });
-      if (hint) lab.appendChild(App.h('span', { class: 'hint', text: hint }));
-      return { wrap: App.h('div', { class: 'field' }, [lab, input]), input };
-    };
-    const company = mkInput('company', '会社名', '任意');
-    const dept = mkInput('department', '部署', '任意');
-    const name = mkInput('name', '氏名', '');
-    const email = mkInput('email', 'メールアドレス', '', 'email');
+    function sameEmail(a, b) {
+      return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+    }
 
-    const honorific = App.h('select');
+    const mkLabel = (text, hint) => {
+      const lab = App.h('label', { text });
+      if (hint) lab.appendChild(App.h('span', { class: 'hint', text: hint }));
+      return lab;
+    };
+
+    // 選んだ相手をchipへ追加する。メールアドレスが空、またはすでに追加済みなら何もしない。
+    function addRecipient(entry) {
+      const email = String((entry && entry.email) || '').trim();
+      if (!email) return false;
+      if (f.recipients.some((r) => sameEmail(r.email, email))) return false;
+      f.recipients.push({
+        company: (entry && entry.company) || '',
+        department: (entry && entry.department) || '',
+        name: (entry && entry.name) || '',
+        honorific: (entry && entry.honorific) || '',
+        email,
+        field: (entry && entry.field) || 'to',
+      });
+      return true;
+    }
+
+    const chipsHost = App.h('div', { class: 'chips' });
+    function renderChips() {
+      while (chipsHost.firstChild) chipsHost.removeChild(chipsHost.firstChild);
+      if (!f.recipients.length) {
+        chipsHost.appendChild(App.h('div', { class: 'status', text: '宛先がまだ選ばれていません。' }));
+        return;
+      }
+      f.recipients.forEach((r, i) => {
+        const label = [r.company, r.name, r.email].filter(Boolean).join(' / ') || r.email;
+
+        const fieldSelect = App.h('select');
+        [['to', 'To'], ['cc', 'CC'], ['bcc', 'BCC']].forEach(([v, l]) => {
+          const opt = App.h('option', { value: v, text: l });
+          if ((r.field || 'to') === v) opt.selected = true;
+          fieldSelect.appendChild(opt);
+        });
+        fieldSelect.addEventListener('change', () => { r.field = fieldSelect.value; });
+
+        const removeBtn = App.h('button', { class: 'chip-remove', text: '×' });
+        removeBtn.addEventListener('click', () => {
+          f.recipients.splice(i, 1);
+          renderChips();
+        });
+
+        chipsHost.appendChild(App.h('div', { class: 'chip recipient-chip' }, [
+          App.h('span', { text: label }),
+          fieldSelect,
+          removeBtn,
+        ]));
+      });
+    }
+
+    // 「アドレス帳から選ぶ」パネル（連絡先・グループをチェックボックスで複数選択）
+    const pickerHost = App.h('div', { class: 'card', hidden: true });
+    const contactChecks = new Map();
+    const groupChecks = new Map();
+
+    const contactsWrap = App.h('div', { class: 'chips' });
+    book.contacts.forEach((c) => {
+      const cbId = `pick-c-${c.id}`;
+      const cb = App.h('input', { type: 'checkbox', id: cbId });
+      contactChecks.set(c.id, cb);
+      const label = App.h('label', { for: cbId, text: [c.company, c.name, c.email].filter(Boolean).join(' / ') });
+      contactsWrap.appendChild(App.h('span', {}, [cb, label]));
+    });
+
+    const groupsWrap = App.h('div', { class: 'chips' });
+    book.groups.forEach((g) => {
+      const cbId = `pick-g-${g.id}`;
+      const cb = App.h('input', { type: 'checkbox', id: cbId });
+      groupChecks.set(g.id, cb);
+      const label = App.h('label', { for: cbId, text: `${g.name}（${(g.memberIds || []).length}人）` });
+      groupsWrap.appendChild(App.h('span', {}, [cb, label]));
+    });
+
+    const applyPickBtn = App.h('button', { text: '選択した相手を追加' });
+    applyPickBtn.addEventListener('click', () => {
+      book.contacts.forEach((c) => {
+        const cb = contactChecks.get(c.id);
+        if (cb && cb.checked) addRecipient({ ...c, field: 'to' });
+      });
+      book.groups.forEach((g) => {
+        const cb = groupChecks.get(g.id);
+        if (!cb || !cb.checked) return;
+        (g.memberIds || []).forEach((mid) => {
+          const member = book.contacts.find((c) => c.id === mid);
+          if (member) addRecipient({ ...member, field: 'to' });
+        });
+      });
+      pickerHost.hidden = true;
+      renderChips();
+    });
+
+    pickerHost.appendChild(App.h('h2', { text: 'アドレス帳から選ぶ' }));
+    if (book.contacts.length) {
+      pickerHost.appendChild(App.h('div', { class: 'field' }, [App.h('label', { text: '連絡先' }), contactsWrap]));
+    }
+    if (book.groups.length) {
+      pickerHost.appendChild(App.h('div', { class: 'field' }, [mkLabel('グループ', '選ぶとメンバー全員が一括で入ります'), groupsWrap]));
+    }
+    if (!book.contacts.length && !book.groups.length) {
+      pickerHost.appendChild(App.h('div', { class: 'status', text: 'アドレス帳にまだ連絡先がありません。' }));
+    }
+    pickerHost.appendChild(App.h('div', { class: 'actions' }, [applyPickBtn]));
+
+    const pickerToggleBtn = App.h('button', { class: 'secondary', text: 'アドレス帳から選ぶ' });
+    pickerToggleBtn.addEventListener('click', () => { pickerHost.hidden = !pickerHost.hidden; });
+
+    // アドレス帳に無い相手のための直接入力欄
+    const directCompany = App.h('input', { type: 'text' });
+    const directDept = App.h('input', { type: 'text' });
+    const directName = App.h('input', { type: 'text' });
+    const directEmail = App.h('input', { type: 'email' });
+    const directHonorific = App.h('select');
     [['様', '様'], ['御中', '御中'], ['先生', '先生'], ['', '敬称なし']].forEach(([v, label]) => {
       const opt = App.h('option', { value: v, text: label });
-      if (f.recipient.honorific === v) opt.selected = true;
-      honorific.appendChild(opt);
+      if (v === '様') opt.selected = true;
+      directHonorific.appendChild(opt);
     });
-    honorific.addEventListener('change', () => { f.recipient.honorific = honorific.value; });
+    const directAddBtn = App.h('button', { class: 'secondary', text: '追加' });
+    const directErrorEl = App.h('div', { class: 'error', hidden: true });
 
-    // 履歴から選ぶ
-    const picker = App.h('select');
-    picker.appendChild(App.h('option', { value: '', text: '― 履歴から選ぶ ―' }));
-    contacts.forEach((c, i) => {
-      const label = [c.company, c.name, c.email].filter(Boolean).join(' / ');
-      picker.appendChild(App.h('option', { value: String(i), text: label }));
-    });
-    picker.addEventListener('change', () => {
-      const c = contacts[Number(picker.value)];
-      if (!c) return;
-      Object.assign(f.recipient, {
-        company: c.company || '', department: c.department || '',
-        name: c.name || '', honorific: c.honorific || '様', email: c.email || '',
+    directAddBtn.addEventListener('click', () => {
+      const email = directEmail.value.trim();
+      directEmail.classList.toggle('invalid', !email);
+      if (!email) {
+        directErrorEl.textContent = 'メールアドレスを入力してください。';
+        directErrorEl.hidden = false;
+        return;
+      }
+      const added = addRecipient({
+        company: directCompany.value.trim(),
+        department: directDept.value.trim(),
+        name: directName.value.trim(),
+        honorific: directHonorific.value,
+        email,
+        field: 'to',
       });
-      company.input.value = f.recipient.company;
-      dept.input.value = f.recipient.department;
-      name.input.value = f.recipient.name;
-      email.input.value = f.recipient.email;
-      honorific.value = f.recipient.honorific;
+      if (!added) {
+        directErrorEl.textContent = 'すでに追加されているメールアドレスです。';
+        directErrorEl.hidden = false;
+        return;
+      }
+      directErrorEl.hidden = true;
+      directEmail.classList.remove('invalid');
+      directCompany.value = '';
+      directDept.value = '';
+      directName.value = '';
+      directEmail.value = '';
+      directHonorific.value = '様';
+      renderChips();
     });
+
+    renderChips();
 
     root.appendChild(App.h('div', { class: 'card' }, [
-      App.h('div', { class: 'field' }, [App.h('label', { text: '② 宛先' })]),
-      App.h('div', { class: 'row' }, [company.wrap, dept.wrap]),
-      App.h('div', { class: 'row' }, [name.wrap, App.h('div', { class: 'field' }, [App.h('label', { text: '敬称' }), honorific])]),
-      email.wrap,
-      contacts.length ? App.h('div', { class: 'field' }, [picker]) : null,
+      App.h('div', { class: 'field' }, [App.h('label', { text: '② 宛先' }), chipsHost]),
+      App.h('div', { class: 'actions' }, [pickerToggleBtn]),
+    ]));
+    root.appendChild(pickerHost);
+    root.appendChild(App.h('div', { class: 'card' }, [
+      App.h('div', { class: 'field' }, [App.h('label', { text: 'アドレス帳に無い相手を直接入力' })]),
+      App.h('div', { class: 'row' }, [
+        App.h('div', { class: 'field' }, [mkLabel('会社名', '任意'), directCompany]),
+        App.h('div', { class: 'field' }, [mkLabel('部署', '任意'), directDept]),
+      ]),
+      App.h('div', { class: 'row' }, [
+        App.h('div', { class: 'field' }, [App.h('label', { text: '氏名' }), directName]),
+        App.h('div', { class: 'field' }, [App.h('label', { text: '敬称' }), directHonorific]),
+      ]),
+      App.h('div', { class: 'row' }, [
+        App.h('div', { class: 'field' }, [App.h('label', { text: 'メールアドレス' }), directEmail]),
+      ]),
+      directErrorEl,
+      App.h('div', { class: 'actions' }, [directAddBtn]),
     ]));
 
     // ③④⑤⑥
@@ -127,12 +261,12 @@ Views.compose = {
     submit.addEventListener('click', async () => {
       // 入力チェック（APIを呼ぶ前に）
       const missing = [];
-      [[email.input, f.recipient.email, 'メールアドレス'], [subject, f.subject, '件名'], [memo, f.memo, '一言メモ']]
-        .forEach(([el, value, label]) => {
-          const empty = !String(value || '').trim();
-          el.classList.toggle('invalid', empty);
-          if (empty) missing.push(label);
-        });
+      if (!f.recipients.some((r) => r.field === 'to')) missing.push('宛先（Toを1件以上）');
+      [[subject, f.subject, '件名'], [memo, f.memo, '一言メモ']].forEach(([el, value, label]) => {
+        const empty = !String(value || '').trim();
+        el.classList.toggle('invalid', empty);
+        if (empty) missing.push(label);
+      });
       if (missing.length) {
         errorEl.textContent = `${missing.join('・')}を入力してください。`;
         errorEl.hidden = false;
@@ -144,7 +278,7 @@ Views.compose = {
       Hishoko.say('thinking', '文面を考えています…');
 
       const res = await window.hishoko.mailGenerate({
-        sceneId: f.sceneId, toneId: f.toneId, recipient: f.recipient,
+        sceneId: f.sceneId, toneId: f.toneId, recipients: f.recipients,
         subject: f.subject, memo: f.memo,
       });
 
@@ -158,7 +292,16 @@ Views.compose = {
         if (res.code === 'no_key' || res.code === 'auth') App.go('settings');
         return;
       }
-      App.state.result = { subject: f.subject, body: res.body, to: f.recipient.email, mailer: f.mailer };
+
+      const byField = (field) => f.recipients.filter((r) => r.field === field).map((r) => r.email);
+      App.state.result = {
+        subject: f.subject,
+        body: res.body,
+        to: byField('to'),
+        cc: byField('cc'),
+        bcc: byField('bcc'),
+        mailer: f.mailer,
+      };
       App.go('preview');
     });
   },
