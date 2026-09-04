@@ -60,13 +60,18 @@ header button {
   font-size: 12.5px;
 }
 header button:hover { background: rgba(255, 255, 255, .16); border-color: #fff; }
-header button.ghost { border-color: transparent; padding-left: 6px; padding-right: 8px; }
-header button.ghost:hover { background: rgba(255, 255, 255, .16); }
+header button.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .55);
+  padding-left: 10px;
+  padding-right: 12px;
+}
+header button.ghost:hover { color: #fff; background: rgba(255, 255, 255, .16); border-color: #fff; }
 
 main {
-  padding: 16px 20px 28px;
+  padding: 16px 20px 44px;
   max-width: 880px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 /* --- カード --- */
