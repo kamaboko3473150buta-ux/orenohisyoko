@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
+const fs = require('node:fs');
 const { buildGmailUrl, isUrlTooLong, textToHtml, GMAIL_URL_LIMIT, resolveScriptPath } = require('../src/main/mail-compose/draft');
 
 test('Gmailの新規作成URLが組み立てられる', () => {
@@ -61,4 +62,16 @@ test('resolveScriptPathはapp.asarをapp.asar.unpackedへ置き換える', () =>
   const result = resolveScriptPath(baseDir);
   assert.ok(result.includes(`app.asar.unpacked${path.sep}`), 'app.asar.unpackedへ置き換わる');
   assert.ok(!result.includes(`app.asar${path.sep}src`), '元のapp.asarのままではない');
+});
+
+// 回帰防止（Task 18）: draft-outlook.ps1 は BOM 無し UTF-8 で保存されると、
+// Windows PowerShell 5.1 が ANSI（Shift-JIS）として読んでしまい、日本語コメント内の
+// 全角括弧が壊れて ParserError になる。先頭に UTF-8 BOM (EF BB BF) が付いていることを確認する。
+test('draft-outlook.ps1の先頭にUTF-8のBOMが付いている', () => {
+  const scriptPath = path.join(__dirname, '..', 'src', 'main', 'mail-compose', 'draft-outlook.ps1');
+  const fd = fs.openSync(scriptPath, 'r');
+  const buf = Buffer.alloc(3);
+  fs.readSync(fd, buf, 0, 3, 0);
+  fs.closeSync(fd);
+  assert.deepStrictEqual([...buf], [0xef, 0xbb, 0xbf], '先頭3バイトがEF BB BF（UTF-8 BOM）である');
 });
