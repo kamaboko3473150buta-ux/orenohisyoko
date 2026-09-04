@@ -5,6 +5,7 @@ const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
 const { summarize } = require('../src/main/usage');
+const contactsLib = require('../src/main/contacts');
 const mailCompose = require('../src/main/mail-compose');
 const tasksFeature = require('../src/main/tasks-feature');
 
@@ -32,8 +33,10 @@ function createWindow() {
 
 // --- 設定・履歴へのアクセス ---
 const getSettings = () => loadSettings(PATHS.settings, safeStorage);
-const getContacts = () => readJson(PATHS.contacts, []);
-const saveContacts = (list) => writeJson(PATHS.contacts, list);
+// contacts.json はアドレス帳（{ version: 2, contacts, groups }）。旧形式（宛先履歴の配列）が
+// 残っていても migrate が必ず新形式に揃えるので、読み込み側は常に新形式を前提にできる。
+const getContacts = () => contactsLib.migrate(readJson(PATHS.contacts, []));
+const saveContacts = (book) => writeJson(PATHS.contacts, book);
 const getHistory = () => readJson(PATHS.history, []);
 const saveHistory = (list) => writeJson(PATHS.history, list);
 const getUsage = () => readJson(PATHS.usage, {});
@@ -69,11 +72,16 @@ function registerCommonHandlers() {
   });
 
   ipcMain.handle('settings:counts', () => ({
-    contacts: getContacts().length,
+    contacts: getContacts().contacts.length,
     history: getHistory().length,
   }));
 
-  ipcMain.handle('settings:clearContacts', () => { saveContacts([]); return { ok: true }; });
+  // 連絡先だけを消す。グループの定義自体は残す（グループが指す連絡先が
+  // 無くなっても resolveGroup 側で黙って無視されるだけで、実害は無いため）。
+  ipcMain.handle('settings:clearContacts', () => {
+    saveContacts({ ...getContacts(), contacts: [] });
+    return { ok: true };
+  });
   ipcMain.handle('settings:clearHistory', () => { saveHistory([]); return { ok: true }; });
 
   // API利用状況（Task 19）。金額はこのアプリでの利用実績からの概算。
@@ -82,6 +90,10 @@ function registerCommonHandlers() {
 }
 
 app.whenReady().then(() => {
+  // 起動時に一度、contacts.json が旧形式（宛先履歴の配列）なら新形式へ移行して保存し直す。
+  // 既存ユーザーの宛先履歴（アドレス帳の連絡先の元）を消さないための移行。
+  saveContacts(getContacts());
+
   registerCommonHandlers();
   mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage });
   tasksFeature.register({ getSettings, getTasks, saveTasks, getUsage, saveUsage });

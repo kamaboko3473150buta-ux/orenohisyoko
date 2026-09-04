@@ -10,18 +10,50 @@ const {
 } = require('./prompt');
 const { buildGmailUrl, isUrlTooLong, openOutlookDraft } = require('./draft');
 const { generateBody } = require('../claude');
-const { upsertContact, addHistory } = require('../store');
+const bookLib = require('../contacts');
+const { addHistory } = require('../store');
 const { addUsage } = require('../usage');
 
 function register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage }) {
   // 場面・文体の一覧を画面に渡す
   ipcMain.handle('mail:meta', () => ({ scenes: SCENES, tones: TONES }));
 
-  // 宛先履歴を画面に渡す
-  ipcMain.handle('mail:contacts', () => getContacts());
+  // 宛先履歴を画面に渡す。getContacts()はアドレス帳（{version,contacts,groups}）を返すため、
+  // 従来どおり配列を期待する呼び出し側（compose.jsの「履歴から選ぶ」）に合わせて contacts だけ渡す。
+  ipcMain.handle('mail:contacts', () => getContacts().contacts);
 
   // 文面履歴を画面に渡す
   ipcMain.handle('mail:history', () => getHistory());
+
+  // --- アドレス帳 ---
+  ipcMain.handle('book:get', () => {
+    const book = getContacts();
+    return { ...book, contacts: bookLib.sortContacts(book.contacts) };
+  });
+
+  ipcMain.handle('book:upsertContact', (_e, contact) => {
+    const book = bookLib.upsertContact(getContacts(), contact || {}, new Date().toISOString());
+    saveContacts(book);
+    return { ...book, contacts: bookLib.sortContacts(book.contacts) };
+  });
+
+  ipcMain.handle('book:removeContact', (_e, { id } = {}) => {
+    const book = bookLib.removeContact(getContacts(), id);
+    saveContacts(book);
+    return { ...book, contacts: bookLib.sortContacts(book.contacts) };
+  });
+
+  ipcMain.handle('book:upsertGroup', (_e, group) => {
+    const book = bookLib.upsertGroup(getContacts(), group || {});
+    saveContacts(book);
+    return { ...book, contacts: bookLib.sortContacts(book.contacts) };
+  });
+
+  ipcMain.handle('book:removeGroup', (_e, { id } = {}) => {
+    const book = bookLib.removeGroup(getContacts(), id);
+    saveContacts(book);
+    return { ...book, contacts: bookLib.sortContacts(book.contacts) };
+  });
 
   // 文面を作る
   ipcMain.handle('mail:generate', async (_e, input) => {
@@ -35,9 +67,11 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
 
     const body = appendSignature(result.body, settings.signature);
 
-    // 宛先と文面を履歴に残し、利用状況（トークン数）を記録する
+    // 宛先と文面を履歴に残し、利用状況（トークン数）を記録する。
+    // 宛先はアドレス帳（contacts.json）に upsert する（本タスクからは配列ではなく
+    // { version:2, contacts, groups } 形式のため、store.js ではなく contacts.js を使う）。
     const now = new Date().toISOString();
-    saveContacts(upsertContact(getContacts(), input.recipient || {}, now));
+    saveContacts(bookLib.upsertContact(getContacts(), input.recipient || {}, now));
     saveHistory(addHistory(getHistory(), {
       id: now, scene: input.sceneId, tone: input.toneId,
       to: (input.recipient && input.recipient.email) || '',

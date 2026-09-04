@@ -17,5 +17,9 @@ Views.mailmenu = {
       App.h('h2', { text: '📄 作成した文面の履歴' }),
       App.h('p', { text: '過去に作ったメールを見返し、そのまま下書きとして開けます' }),
     ]));
+    root.appendChild(App.h('div', { class: 'card clickable', onclick: () => App.go('addressbook') }, [
+      App.h('h2', { text: '📇 アドレス帳' }),
+      App.h('p', { text: '宛先の連絡先とグループを管理します' }),
+    ]));
   },
 };
