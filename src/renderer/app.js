@@ -13,6 +13,10 @@ const App = {
     this.backBtn.hidden = this.history.length <= 1;
     this.el.innerHTML = '';
 
+    // 画面を移ったら秘書子はいったん既定（微笑・吹き出しなし）に戻す。
+    // 伝えることがある画面は、このあと自分で say() して上書きする。
+    if (window.Hishoko) Hishoko.reset();
+
     // 画面によっては render が非同期（設定や履歴の読み込みを待つ）。
     // 待っている間に別画面へ移ると、古い画面の要素が今の画面に紛れ込んでしまう。
     // そこで、いったん画面から切り離した器に描き、描き終わった時点で

@@ -309,7 +309,7 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-width: min(280px, calc(100vw - 40px));
+  max-width: min(340px, calc(100vw - 40px));
 }
 
 .hishoko-bubble {
@@ -322,15 +322,15 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 }
 .hishoko-bubble p {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.65;
   color: var(--text);
   white-space: pre-wrap;
 }
 .hishoko-bubble::after {
   content: "";
   position: absolute;
-  right: 22px;
+  right: 52px;
   bottom: -7px;
   width: 12px;
   height: 12px;
@@ -342,11 +342,11 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 
 .hishoko-figure {
   position: relative;
-  width: 60px;
-  height: 60px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   background: var(--accent-weak);
-  border: 2px solid var(--accent);
+  border: 3px solid var(--accent);
   overflow: hidden;
   cursor: pointer;
   flex: 0 0 auto;
@@ -357,10 +357,10 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--accent);
   text-align: center;
-  padding: 2px;
+  padding: 4px;
 }
 .hishoko-img {
   position: absolute;

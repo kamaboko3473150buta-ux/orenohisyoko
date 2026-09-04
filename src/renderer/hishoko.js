@@ -108,5 +108,13 @@ window.Hishoko = (function () {
     paintBubbleVisibility();
   }
 
-  return { say, clear };
+  // 画面を移ったときの既定の状態に戻す。表情は「微笑」。
+  // 画面ごとに伝えることがあれば、そのあと say() で上書きされる。
+  function reset() {
+    ensureBuilt();
+    setExpression('normal');
+    clear();
+  }
+
+  return { say, clear, reset };
 }());
