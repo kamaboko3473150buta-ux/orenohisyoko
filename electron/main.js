@@ -16,6 +16,9 @@ function createWindow() {
     width: 1000,
     height: 800,
     title: '俺の秘書子',
+    // 開発中（npm start）のウィンドウ左上・タスクバー用。
+    // パッケージ後は exe に埋め込んだアイコンが使われる。
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
