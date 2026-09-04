@@ -15,7 +15,7 @@ const PATHS = makePaths(app.getPath('userData'));
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1000,
+    width: 1140,
     height: 800,
     title: '俺の秘書子',
     // 開発中（npm start）のウィンドウ左上・タスクバー用。

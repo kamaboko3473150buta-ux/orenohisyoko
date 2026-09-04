@@ -361,7 +361,7 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 .hishoko-bubble::after {
   content: "";
   position: absolute;
-  right: 52px;
+  right: 60px;
   bottom: -7px;
   width: 12px;
   height: 12px;
@@ -373,8 +373,8 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 
 .hishoko-figure {
   position: relative;
-  width: 120px;
-  height: 120px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
   background: var(--accent-weak);
   border: 3px solid var(--accent);
