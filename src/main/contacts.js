@@ -58,12 +58,25 @@ function upsertContact(book, contact, nowIso) {
   if (!email) return b;
 
   const key = email.toLowerCase();
-  const idx = b.contacts.findIndex((c) => clean(c && c.email).toLowerCase() === key);
+
+  // 探す順番が大事。まず id、次にメールアドレス。
+  // アドレス帳の編集ではメールアドレス自体を訂正することがあり、
+  // メールアドレスだけで探すと「別人が増えて古い方が残る」ことになる。
+  // そうなるとグループの所属も古い方を指したままになり、編集が反映されない。
+  const givenId = clean(contact && contact.id);
+  let idx = givenId ? b.contacts.findIndex((c) => c && c.id === givenId) : -1;
+  if (idx === -1) idx = b.contacts.findIndex((c) => clean(c && c.email).toLowerCase() === key);
+
   const next = { ...contact, email, lastUsedAt: nowIso, id: idx === -1 ? genId('c') : b.contacts[idx].id };
 
-  const contacts = b.contacts.slice();
+  let contacts = b.contacts.slice();
   if (idx === -1) contacts.push(next);
   else contacts[idx] = next;
+
+  // 既にいる別の人のメールアドレスに変更した場合、同じアドレスが2件残らないようにする
+  contacts = contacts.filter((c, i) => i === contacts.indexOf(next)
+    || clean(c && c.email).toLowerCase() !== key);
+
   return { ...b, contacts };
 }
 

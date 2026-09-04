@@ -142,3 +142,40 @@ test('sortContactsは元の配列を壊さない', () => {
   sortContacts(list);
   assert.strictEqual(list.map((c) => c.company).join(','), before);
 });
+
+// アドレス帳の編集は id を手がかりにする。メールアドレスを訂正しても
+// 別人として複製されず、グループの所属も保たれることを担保する。
+test('既存のidを渡してメールアドレスを変えると、複製されず上書きされる', () => {
+  let book = upsertContact(migrate(null), { email: 'old@example.com', name: '山田' }, '2026-09-01T00:00:00.000Z');
+  const id = book.contacts[0].id;
+  book = upsertContact(book, { id, email: 'new@example.com', name: '山田' }, '2026-09-05T00:00:00.000Z');
+  assert.strictEqual(book.contacts.length, 1, '1件のまま');
+  assert.strictEqual(book.contacts[0].id, id, 'idが変わらない');
+  assert.strictEqual(book.contacts[0].email, 'new@example.com', '新しいアドレスになる');
+});
+
+test('メールアドレスを変えてもグループの所属が保たれる', () => {
+  let book = upsertContact(migrate(null), { email: 'old@example.com', name: '山田' }, '2026-09-01T00:00:00.000Z');
+  const id = book.contacts[0].id;
+  book = upsertGroup(book, { name: '営業部', memberIds: [id] });
+  book = upsertContact(book, { id, email: 'new@example.com', name: '山田' }, '2026-09-05T00:00:00.000Z');
+  const members = resolveGroup(book, book.groups[0].id);
+  assert.strictEqual(members.length, 1, 'メンバーが残っている');
+  assert.strictEqual(members[0].email, 'new@example.com', '新しいアドレスが反映される');
+});
+
+test('別人のメールアドレスに変更したとき、重複した連絡先が残らない', () => {
+  let book = upsertContact(migrate(null), { email: 'a@example.com', name: 'A' }, '2026-09-01T00:00:00.000Z');
+  book = upsertContact(book, { email: 'b@example.com', name: 'B' }, '2026-09-01T00:00:00.000Z');
+  const idA = book.contacts.find((c) => c.email === 'a@example.com').id;
+  book = upsertContact(book, { id: idA, email: 'b@example.com', name: 'A改' }, '2026-09-05T00:00:00.000Z');
+  const emails = book.contacts.map((c) => c.email);
+  assert.strictEqual(emails.filter((e) => e === 'b@example.com').length, 1, '同じアドレスが2件にならない');
+});
+
+test('存在しないidを渡した場合はメールアドレスで判定する', () => {
+  let book = upsertContact(migrate(null), { email: 'a@example.com', name: 'A' }, '2026-09-01T00:00:00.000Z');
+  book = upsertContact(book, { id: 'c-zzzzzzzz', email: 'a@example.com', name: 'A改' }, '2026-09-05T00:00:00.000Z');
+  assert.strictEqual(book.contacts.length, 1, '1件のまま');
+  assert.strictEqual(book.contacts[0].name, 'A改', '上書きされる');
+});

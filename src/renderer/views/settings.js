@@ -79,15 +79,18 @@ Views.settings = {
       App.h('div', { class: 'actions' }, [saveBtn]),
     ]));
 
-    // 履歴
-    const contactsLabel = App.h('div', { class: 'status', text: `宛先履歴: ${counts.contacts}件` });
+    // アドレス帳と文面履歴
+    // 「履歴」ではなく自分で育てた資産なので、消すときは必ず確認を挟む。
+    const contactsLabel = App.h('div', { class: 'status', text: `アドレス帳の連絡先: ${counts.contacts}件` });
     const historyLabel = App.h('div', { class: 'status', text: `文面履歴: ${counts.history}件` });
-    const clearContactsBtn = App.h('button', { class: 'secondary', text: '宛先履歴を消去' });
+    const clearContactsBtn = App.h('button', { class: 'secondary', text: 'アドレス帳を空にする' });
     const clearHistoryBtn = App.h('button', { class: 'secondary', text: '文面履歴を消去' });
     clearContactsBtn.addEventListener('click', async () => {
+      const ok = window.confirm('アドレス帳の連絡先をすべて削除します。元に戻せません。よろしいですか？');
+      if (!ok) return;
       await window.hishoko.clearContacts();
-      contactsLabel.textContent = '宛先履歴: 0件';
-      App.toast('宛先履歴を消去しました');
+      contactsLabel.textContent = 'アドレス帳の連絡先: 0件';
+      App.toast('アドレス帳を空にしました');
     });
     clearHistoryBtn.addEventListener('click', async () => {
       await window.hishoko.clearHistory();

@@ -84,7 +84,10 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
     // 選んだ全員（To/CC/BCCすべて）をアドレス帳に upsert し、文面履歴・利用状況を記録する
     const now = new Date().toISOString();
     let book = getContacts();
-    recipients.forEach((r) => { book = bookLib.upsertContact(book, r, now); });
+    // field（to/cc/bcc）はこの1通だけの話なので、アドレス帳には持ち込まない
+    recipients.forEach(({ field, ...contact }) => {
+      book = bookLib.upsertContact(book, contact, now);
+    });
     saveContacts(book);
 
     saveHistory(addHistory(getHistory(), {
