@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   signature: '',
   defaultTone: 'formal_external',
   defaultMailer: 'outlook',
+  defaultTaskInput: 'manual',
 };
 
 // ファイルに保存する形:
@@ -19,6 +20,8 @@ function loadSettings(filePath, crypto) {
     signature: typeof raw.signature === 'string' ? raw.signature : DEFAULT_SETTINGS.signature,
     defaultTone: raw.defaultTone || DEFAULT_SETTINGS.defaultTone,
     defaultMailer: raw.defaultMailer || DEFAULT_SETTINGS.defaultMailer,
+    // 未知の値は既定の'manual'に倒す（誤った値でAI取り込みが勝手に選ばれないように）。
+    defaultTaskInput: raw.defaultTaskInput === 'ai' ? 'ai' : DEFAULT_SETTINGS.defaultTaskInput,
     apiKey: '',
     encrypted: false,
   };
@@ -54,7 +57,7 @@ function saveSettings(filePath, patch, crypto) {
       }
     }
   }
-  for (const field of ['signature', 'defaultTone', 'defaultMailer']) {
+  for (const field of ['signature', 'defaultTone', 'defaultMailer', 'defaultTaskInput']) {
     if (Object.prototype.hasOwnProperty.call(patch, field)) next[field] = patch[field];
   }
 

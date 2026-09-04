@@ -116,6 +116,8 @@ main {
 
 input[type="text"],
 input[type="email"],
+input[type="date"],
+input[type="time"],
 textarea,
 select {
   width: 100%;
@@ -251,4 +253,119 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
   font-size: 13px;
   max-width: 80%;
   text-align: center;
+}
+
+/* --- タスク・スケジュール管理 --- */
+
+.task-add-row { display: flex; gap: 8px; }
+.task-add-row input { flex: 1; min-width: 0; }
+.task-add-row button { flex: 0 0 auto; }
+
+.radio-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.radio-row span { display: inline-flex; align-items: center; gap: 4px; }
+.radio-row input[type="radio"] { margin: 0; }
+.radio-row label { font-weight: normal; cursor: pointer; }
+
+.task-group-heading {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.task-group-heading:first-child { margin-top: 0; }
+.task-group-toggle { cursor: pointer; }
+.task-group-toggle:hover { color: var(--text); }
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.task-row:last-child { border-bottom: none; }
+.task-row:hover { background: var(--accent-weak); }
+.task-title { flex: 1; font-size: 13.5px; }
+.task-meta { color: var(--muted); font-size: 12px; flex: 0 0 auto; white-space: nowrap; }
+.task-overdue .task-title, .task-overdue .task-meta { color: var(--danger); }
+.task-today .task-title { font-weight: 600; }
+
+/* --- 秘書子の吹き出し（全画面共通） --- */
+
+.hishoko-widget {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(280px, calc(100vw - 40px));
+}
+
+.hishoko-bubble {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 14px rgba(22, 48, 43, .12);
+}
+.hishoko-bubble p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.hishoko-bubble::after {
+  content: "";
+  position: absolute;
+  right: 22px;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  background: var(--panel);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+
+.hishoko-figure {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--accent-weak);
+  border: 2px solid var(--accent);
+  overflow: hidden;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.hishoko-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--accent);
+  text-align: center;
+  padding: 2px;
+}
+.hishoko-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

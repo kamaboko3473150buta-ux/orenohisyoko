@@ -6,6 +6,7 @@ const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
 const { summarize } = require('../src/main/usage');
 const mailCompose = require('../src/main/mail-compose');
+const tasksFeature = require('../src/main/tasks-feature');
 
 // 保存先を明示的に固定する（productNameが日本語でもフォルダ名を英字に保つため）
 app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
@@ -37,6 +38,8 @@ const getHistory = () => readJson(PATHS.history, []);
 const saveHistory = (list) => writeJson(PATHS.history, list);
 const getUsage = () => readJson(PATHS.usage, {});
 const saveUsage = (store) => writeJson(PATHS.usage, store);
+const getTasks = () => readJson(PATHS.tasks, []);
+const saveTasks = (list) => writeJson(PATHS.tasks, list);
 
 function registerCommonHandlers() {
   // 画面にはAPIキーそのものを渡さない。設定済みかどうかだけ伝える。
@@ -48,6 +51,7 @@ function registerCommonHandlers() {
       signature: s.signature,
       defaultTone: s.defaultTone,
       defaultMailer: s.defaultMailer,
+      defaultTaskInput: s.defaultTaskInput,
     };
   });
 
@@ -60,6 +64,7 @@ function registerCommonHandlers() {
       signature: s.signature,
       defaultTone: s.defaultTone,
       defaultMailer: s.defaultMailer,
+      defaultTaskInput: s.defaultTaskInput,
     };
   });
 
@@ -79,6 +84,7 @@ function registerCommonHandlers() {
 app.whenReady().then(() => {
   registerCommonHandlers();
   mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage });
+  tasksFeature.register({ getSettings, getTasks, saveTasks, getUsage, saveUsage });
   createWindow();
 
   app.on('activate', () => {

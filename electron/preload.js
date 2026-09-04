@@ -22,4 +22,13 @@ contextBridge.exposeInMainWorld('hishoko', {
   mailOpenOutlook: (args) => ipcRenderer.invoke('mail:openOutlook', args),
   mailOpenGmail: (args) => ipcRenderer.invoke('mail:openGmail', args),
   mailCopy: (args) => ipcRenderer.invoke('mail:copy', args),
+
+  // タスク・スケジュール管理
+  taskList: () => ipcRenderer.invoke('task:list'),
+  taskAdd: (input) => ipcRenderer.invoke('task:add', input),
+  taskUpdate: (args) => ipcRenderer.invoke('task:update', args),
+  taskRemove: (args) => ipcRenderer.invoke('task:remove', args),
+  taskToggle: (args) => ipcRenderer.invoke('task:toggle', args),
+  taskParse: (args) => ipcRenderer.invoke('task:parse', args),
+  taskBrief: () => ipcRenderer.invoke('task:brief'),
 });

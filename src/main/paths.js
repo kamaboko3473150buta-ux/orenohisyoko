@@ -12,6 +12,7 @@ function makePaths(baseDir) {
     contacts: path.join(baseDir, 'contacts.json'),
     history: path.join(baseDir, 'history.json'),
     usage: path.join(baseDir, 'usage.json'),
+    tasks: path.join(baseDir, 'tasks.json'),
   };
 }
 
