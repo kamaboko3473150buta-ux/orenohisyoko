@@ -4,11 +4,24 @@
 // ブラウザやOSがURLを切り落とす恐れのある長さ。これを超えたら本文はクリップボード経由にする。
 const GMAIL_URL_LIMIT = 8000;
 
-function buildGmailUrl({ to, subject, body } = {}) {
-  const params = [
-    `to=${encodeURIComponent(to || '')}`,
-    `su=${encodeURIComponent(subject || '')}`,
-  ];
+// to/cc/bcc は文字列でも配列でも受け付ける。既存の呼び出しが文字列を渡しているため、
+// 配列を足しても文字列側の挙動は変えない。配列は「; 」で連結する（Gmailは , でも ; でも通るが、
+// 表示上わかりやすい ; に統一する）。
+function toAddressString(v) {
+  if (Array.isArray(v)) return v.join('; ');
+  return v || '';
+}
+
+function buildGmailUrl({ to, cc, bcc, subject, body } = {}) {
+  const params = [`to=${encodeURIComponent(toAddressString(to))}`];
+
+  const ccStr = toAddressString(cc);
+  if (ccStr) params.push(`cc=${encodeURIComponent(ccStr)}`);
+
+  const bccStr = toAddressString(bcc);
+  if (bccStr) params.push(`bcc=${encodeURIComponent(bccStr)}`);
+
+  params.push(`su=${encodeURIComponent(subject || '')}`);
   if (body) params.push(`body=${encodeURIComponent(body)}`);
   return `https://mail.google.com/mail/?view=cm&fs=1&${params.join('&')}`;
 }
@@ -51,11 +64,19 @@ function resolveScriptPath(baseDir = __dirname) {
 }
 
 // Outlook の新規メールウィンドウを開く。成功なら { ok: true }。
-async function openOutlookDraft({ to, subject, body }) {
+// to/cc/bcc は buildGmailUrl と同じく文字列・配列のどちらでも受け付ける。
+async function openOutlookDraft({ to, cc, bcc, subject, body }) {
   // process.pid とランダムなUUIDを足して一意にする。連打などで同時に呼ばれても
   // ファイル名が衝突して別の宛先・本文の下書きが開いたり、読み取り中に消してしまう競合を防ぐ。
   const jobPath = path.join(os.tmpdir(), `hishoko-draft-${process.pid}-${randomUUID()}.json`);
-  fs.writeFileSync(jobPath, JSON.stringify({ to: to || '', subject: subject || '', html: textToHtml(body) }), 'utf8');
+  const job = {
+    to: toAddressString(to),
+    cc: toAddressString(cc),
+    bcc: toAddressString(bcc),
+    subject: subject || '',
+    html: textToHtml(body),
+  };
+  fs.writeFileSync(jobPath, JSON.stringify(job), 'utf8');
 
   try {
     await new Promise((resolve, reject) => {

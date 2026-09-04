@@ -11,6 +11,8 @@ try {
   $outlook = New-Object -ComObject Outlook.Application
   $mail = $outlook.CreateItem(0)   # 0 = olMailItem
   $mail.To = $job.to
+  if ($job.cc) { $mail.CC = $job.cc }
+  if ($job.bcc) { $mail.BCC = $job.bcc }
   $mail.Subject = $job.subject
   $mail.HTMLBody = $job.html
   $mail.Display()                  # 下書きウィンドウを表示するだけ

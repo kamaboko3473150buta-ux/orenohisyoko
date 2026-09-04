@@ -31,6 +31,67 @@ test('何も入力がないときは空文字を返す', () => {
   assert.strictEqual(buildAddressBlock({}), '');
 });
 
+const { buildAddressBlockMulti } = require('../src/main/mail-compose/prompt');
+
+test('buildAddressBlockMultiは0件のとき空文字を返す', () => {
+  assert.strictEqual(buildAddressBlockMulti([]), '');
+});
+
+test('buildAddressBlockMultiは1件のときbuildAddressBlockと同じ結果になる', () => {
+  const recipient = { company: '株式会社○○', department: '営業部', name: '山田 太郎', honorific: '様' };
+  assert.strictEqual(buildAddressBlockMulti([recipient]), buildAddressBlock(recipient));
+});
+
+test('buildAddressBlockMultiは同じ会社・同じ部署の2件で「会社\\n部署 各位」になる', () => {
+  const r = buildAddressBlockMulti([
+    { company: '株式会社○○', department: '営業部', name: '山田' },
+    { company: '株式会社○○', department: '営業部', name: '佐藤' },
+  ]);
+  assert.strictEqual(r, '株式会社○○\n営業部 各位');
+});
+
+test('buildAddressBlockMultiは同じ会社・部署違いで「会社 各位」になる', () => {
+  const r = buildAddressBlockMulti([
+    { company: '株式会社○○', department: '営業部', name: '山田' },
+    { company: '株式会社○○', department: '経理部', name: '佐藤' },
+  ]);
+  assert.strictEqual(r, '株式会社○○ 各位');
+});
+
+test('buildAddressBlockMultiは同じ会社で部署が未入力の相手が混じっても「会社 各位」になる', () => {
+  const r = buildAddressBlockMulti([
+    { company: '株式会社○○', department: '営業部', name: '山田' },
+    { company: '株式会社○○', name: '佐藤' },
+  ]);
+  assert.strictEqual(r, '株式会社○○ 各位');
+});
+
+test('buildAddressBlockMultiは会社違いで「関係者各位」になる', () => {
+  const r = buildAddressBlockMulti([
+    { company: '株式会社○○', name: '山田' },
+    { company: '株式会社△△', name: '佐藤' },
+  ]);
+  assert.strictEqual(r, '関係者各位');
+});
+
+test('buildAddressBlockMultiは会社が全員未入力なら「関係者各位」になる', () => {
+  const r = buildAddressBlockMulti([{ name: '山田' }, { name: '佐藤' }]);
+  assert.strictEqual(r, '関係者各位');
+});
+
+test('buildAddressBlockMultiは前後の空白を除いて共通判定する', () => {
+  const r = buildAddressBlockMulti([
+    { company: '  株式会社○○  ', department: ' 営業部 ', name: '山田' },
+    { company: '株式会社○○', department: '営業部', name: '佐藤' },
+  ]);
+  assert.strictEqual(r, '株式会社○○\n営業部 各位');
+});
+
+test('buildAddressBlockMultiは配列でない入力でも落ちず空文字を返す', () => {
+  assert.strictEqual(buildAddressBlockMulti(undefined), '');
+  assert.strictEqual(buildAddressBlockMulti(null), '');
+});
+
 const { buildSystemPrompt, buildUserPrompt } = require('../src/main/mail-compose/prompt');
 
 test('systemプロンプトは本文だけを出力するよう指示している', () => {

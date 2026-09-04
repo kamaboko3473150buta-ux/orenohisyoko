@@ -33,6 +33,31 @@ function buildAddressBlock({ company, department, name, honorific } = {}) {
   return lines.join('\n');
 }
 
+// 複数の値が「共通」と言えるときだけその値を返す。1件でも空欄（未入力）があれば
+// 共通とはみなさない（空欄同士が一致していても「揃っている」とは言えないため）。
+function commonValue(values) {
+  const trimmed = values.map(clean);
+  if (trimmed.some((v) => !v)) return null;
+  const first = trimmed[0];
+  return trimmed.every((v) => v === first) ? first : null;
+}
+
+// 複数宛先向けの宛名ブロックを作る。1件なら buildAddressBlock と同じ結果にする
+// （宛先を複数対応にしても、これまでどおりの1件送信の見た目を変えないため）。
+// 2件以上は会社・部署の共通度に応じて「各位」でまとめる。
+function buildAddressBlockMulti(recipients) {
+  const list = Array.isArray(recipients) ? recipients : [];
+  if (list.length === 0) return '';
+  if (list.length === 1) return buildAddressBlock(list[0] || {});
+
+  const company = commonValue(list.map((r) => (r || {}).company));
+  const department = commonValue(list.map((r) => (r || {}).department));
+
+  if (company && department) return `${company}\n${department} 各位`;
+  if (company) return `${company} 各位`;
+  return '関係者各位';
+}
+
 // AIへの役割指示。出力形式の制約はここで担保する
 // （Opus 5 以降は assistant プレフィルが使えないため、system で指示する）。
 function buildSystemPrompt() {
@@ -125,6 +150,6 @@ function buildReplyUserPrompt({ toneId, received, memo } = {}) {
 }
 
 module.exports = {
-  buildAddressBlock, buildSystemPrompt, buildUserPrompt, appendSignature,
+  buildAddressBlock, buildAddressBlockMulti, buildSystemPrompt, buildUserPrompt, appendSignature,
   buildReplySystemPrompt, buildReplyUserPrompt,
 };

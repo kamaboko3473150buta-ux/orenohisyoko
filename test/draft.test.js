@@ -50,6 +50,36 @@ test('to/subjectが未指定でもundefinedという文字列が混ざらない'
   assert.ok(!url.includes('undefined'), 'undefined文字列が含まれない');
 });
 
+test('cc/bccがURLに入る。空なら付かない', () => {
+  const url = buildGmailUrl({ to: 'a@example.com', cc: 'b@example.com', subject: '件名', body: '本文' });
+  assert.ok(url.includes('cc=b%40example.com'), 'ccが入る');
+  assert.ok(!url.includes('bcc='), 'bccを指定していないので付かない');
+
+  const url2 = buildGmailUrl({ to: 'a@example.com', bcc: 'c@example.com', subject: '件名', body: '本文' });
+  assert.ok(!url2.includes('cc=b'), 'ccを指定していないので付かない');
+  assert.ok(url2.includes('bcc=c%40example.com'), 'bccが入る');
+});
+
+test('to/cc/bccに配列を渡すと「; 」で連結される', () => {
+  const url = buildGmailUrl({
+    to: ['a@example.com', 'b@example.com'],
+    cc: ['c@example.com', 'd@example.com'],
+    bcc: ['e@example.com'],
+    subject: '件名',
+  });
+  assert.ok(url.includes(`to=${encodeURIComponent('a@example.com; b@example.com')}`), 'toが; で連結される');
+  assert.ok(url.includes(`cc=${encodeURIComponent('c@example.com; d@example.com')}`), 'ccが; で連結される');
+  assert.ok(url.includes(`bcc=${encodeURIComponent('e@example.com')}`), 'bccが入る');
+});
+
+test('既存の呼び出し（文字列のtoだけ、cc/bcc省略）は今までどおり動く', () => {
+  const url = buildGmailUrl({ to: 'a@example.com', subject: '御礼', body: 'こんにちは' });
+  assert.ok(url.startsWith('https://mail.google.com/mail/?view=cm&fs=1'), '新規作成URLである');
+  assert.ok(url.includes('to=a%40example.com'), '宛先が文字列のときと同じくエスケープされる');
+  assert.ok(!url.includes('cc='), 'ccパラメータが付かない');
+  assert.ok(!url.includes('bcc='), 'bccパラメータが付かない');
+});
+
 test('resolveScriptPathは通常時はdraft-outlook.ps1で終わるパスを返す', () => {
   const baseDir = path.join('C:', 'app', 'src', 'main', 'mail-compose');
   const result = resolveScriptPath(baseDir);
