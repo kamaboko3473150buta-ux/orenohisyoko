@@ -106,3 +106,39 @@ test('会社名＋部署で氏名が無いとき、会社名は別行・部署�
   const r = buildAddressBlock({ company: '株式会社○○', department: '営業部', honorific: '御中' });
   assert.strictEqual(r, '株式会社○○\n営業部 御中');
 });
+
+const { buildReplySystemPrompt, buildReplyUserPrompt } = require('../src/main/mail-compose/prompt');
+
+test('返信のsystemプロンプトに返信・件名・引用・署名を書かない旨の指示が含まれる', () => {
+  const s = buildReplySystemPrompt();
+  assert.ok(s.includes('返信'), '返信であることに触れている');
+  assert.ok(s.includes('件名'), '件名を出力しない指示がある');
+  assert.ok(s.includes('引用'), '引用を付けない指示がある');
+  assert.ok(s.includes('署名'), '署名を書かない指示がある');
+});
+
+test('buildReplyUserPromptに受信メール本文と文体名が埋め込まれる', () => {
+  const p = buildReplyUserPrompt({
+    toneId: 'internal',
+    received: 'お世話になっております。来週の会議の件でご相談です。',
+    memo: '来週なら参加できる旨を伝えたい',
+  });
+  assert.ok(p.includes('お世話になっております。来週の会議の件でご相談です。'), '受信メール本文が入る');
+  assert.ok(p.includes('社内向け・簡潔に'), '文体の名前が入る');
+  assert.ok(p.includes('来週なら参加できる旨を伝えたい'), '一言メモが入る');
+});
+
+test('buildReplyUserPromptは一言メモが空でもundefined/nullが文字列に混ざらない', () => {
+  const p = buildReplyUserPrompt({ toneId: 'formal_external', received: '本文', memo: '' });
+  assert.ok(!p.includes('undefined'), 'undefinedが含まれない');
+  assert.ok(!p.includes('null'), 'nullが含まれない');
+
+  const p2 = buildReplyUserPrompt({ toneId: 'formal_external', received: '本文' });
+  assert.ok(!p2.includes('undefined'), 'memo未指定でもundefinedが含まれない');
+  assert.ok(!p2.includes('null'), 'memo未指定でもnullが含まれない');
+});
+
+test('buildReplyUserPromptは存在しない文体IDでも落ちず既定の文体になる', () => {
+  const p = buildReplyUserPrompt({ toneId: 'zzz', received: '本文', memo: '' });
+  assert.ok(p.includes('かしこまった社外向け'), '既定の文体になる');
+});

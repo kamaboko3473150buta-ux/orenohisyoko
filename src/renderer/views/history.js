@@ -19,15 +19,15 @@ Views.history = {
       root.appendChild(App.h('div', {
         class: 'card clickable',
         onclick: () => {
-          App.state.result = {
-            subject: item.subject || '', body: item.body || '',
-            to: item.to || '', mailer: 'outlook',
-          };
+          // 返信文（scene: 'reply'）は宛先・件名を持たないため、プレビューも返信モードで開く
+          App.state.result = item.scene === 'reply'
+            ? { subject: '', body: item.body || '', to: '', mode: 'reply' }
+            : { subject: item.subject || '', body: item.body || '', to: item.to || '', mailer: 'outlook' };
           App.go('preview');
         },
       }, [
         App.h('p', { text: head }),
-        App.h('h2', { text: item.subject || '（件名なし）' }),
+        App.h('h2', { text: item.subject || (item.scene === 'reply' ? '（返信文）' : '（件名なし）') }),
         App.h('p', { text: String(item.body || '').replace(/\n/g, ' ').slice(0, 60) + '…' }),
       ]));
     });

@@ -4,7 +4,10 @@
 
 const { ipcMain, shell, clipboard } = require('electron');
 const { SCENES, TONES } = require('./scenes');
-const { buildSystemPrompt, buildUserPrompt, appendSignature } = require('./prompt');
+const {
+  buildSystemPrompt, buildUserPrompt, appendSignature,
+  buildReplySystemPrompt, buildReplyUserPrompt,
+} = require('./prompt');
 const { buildGmailUrl, isUrlTooLong, openOutlookDraft } = require('./draft');
 const { generateBody } = require('../claude');
 const { upsertContact, addHistory } = require('../store');
@@ -45,6 +48,29 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
     return { ok: true, body };
   });
 
+  // 返信文を作る。宛先・件名・場面の指定は無い（すでにメーラーで「返信」を
+  // 押している前提のため）。宛先が無いので宛先履歴には保存しない。
+  ipcMain.handle('mail:generateReply', async (_e, input) => {
+    const settings = getSettings();
+    const result = await generateBody({
+      apiKey: settings.apiKey,
+      system: buildReplySystemPrompt(),
+      user: buildReplyUserPrompt(input),
+    });
+    if (!result.ok) return result;
+
+    const body = appendSignature(result.body, settings.signature);
+
+    const now = new Date().toISOString();
+    saveHistory(addHistory(getHistory(), {
+      id: now, scene: 'reply', tone: input && input.toneId,
+      to: '', subject: '', body, createdAt: now,
+    }));
+    saveUsage(addUsage(getUsage(), result.usage, now));
+
+    return { ok: true, body };
+  });
+
   // Outlook の下書きを開く
   ipcMain.handle('mail:openOutlook', async (_e, { to, subject, body }) => openOutlookDraft({ to, subject, body }));
 
@@ -60,9 +86,9 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
     return { ok: true, copiedToClipboard: true };
   });
 
-  // クリップボードにコピー
+  // クリップボードにコピー。件名が無い（＝返信文作成）ときは本文だけをコピーする。
   ipcMain.handle('mail:copy', (_e, { subject, body }) => {
-    clipboard.writeText(`${subject}\n\n${body}`);
+    clipboard.writeText(subject ? `${subject}\n\n${body}` : body);
     return { ok: true };
   });
 }

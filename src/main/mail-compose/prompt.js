@@ -87,4 +87,44 @@ function appendSignature(body, signature) {
   return b + SIGNATURE_SEPARATOR + s;
 }
 
-module.exports = { buildAddressBlock, buildSystemPrompt, buildUserPrompt, appendSignature };
+// 返信文作成用のAIへの役割指示。
+// 新規メール作成と違い、宛先・件名・場面の指定が無い（すでにメーラーで「返信」を
+// 押している前提のため）。その代わり、引用や署名を付けないことを明確に指示する必要がある。
+function buildReplySystemPrompt() {
+  return [
+    'あなたは日本企業で働く経験豊富な秘書です。受け取ったメールへの返信の本文を作成します。',
+    '',
+    '出力のきまり:',
+    '- 返信の本文のみを出力すること。前置き・解説・補足・マークダウン記法は一切書かない。',
+    '- 件名は出力しない（返信済みのメールに自動で入るため、依頼者のアプリは扱わない）。',
+    '- 引用（「>」などを付けた元のメールの引用）は付けない。',
+    '- 署名（会社名・氏名・連絡先）は書かない。依頼者のアプリが後から付ける。',
+    '- 相手の会社名・氏名が受信メールの文面から読み取れる場合は、冒頭に宛名を置いてよい。',
+    '- 事実を創作しない。受信メールに書かれていない日付・金額・条件などを勝手に作らない。',
+    '  必要だが不明な情報がある場合は［ ］で囲んだ空欄にして、依頼者が埋められるようにする。',
+    '- 受信メールに複数の質問や依頼が含まれる場合は、漏らさずすべてに触れる。',
+  ].join('\n');
+}
+
+// 実際の依頼内容。受信メールの本文と、任意の一言メモをそのまま展開する。
+function buildReplyUserPrompt({ toneId, received, memo } = {}) {
+  const tone = findTone(toneId);
+
+  return [
+    `【文体】${tone.label}`,
+    `【この文体の書き方】${tone.guide}`,
+    '',
+    '【受信したメールの本文】',
+    clean(received) || '（本文なし）',
+    '',
+    '【伝えたいこと（任意。指定が無ければ受信メールの内容だけから判断すること）】',
+    clean(memo) || '（指定なし）',
+    '',
+    '上記をふまえて、返信の本文のみを出力してください。',
+  ].join('\n');
+}
+
+module.exports = {
+  buildAddressBlock, buildSystemPrompt, buildUserPrompt, appendSignature,
+  buildReplySystemPrompt, buildReplyUserPrompt,
+};
