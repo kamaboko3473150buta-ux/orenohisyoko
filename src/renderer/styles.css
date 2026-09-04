@@ -1,73 +1,254 @@
+/* src/renderer/styles.css
+   配色は「白基調＋差し色は青緑（ティール）1色」。
+   業務中に長時間見ても疲れないよう、彩度の高い色は選択中の項目と主ボタンだけに使う。
+   余白と文字は、一画面に収まる情報を増やすためやや詰めている。 */
+
 :root {
-  --bg: #f5f6f8;
+  --accent: #0f7d6b;
+  --accent-hover: #0b6155;
+  --accent-weak: #e7f3f0;
+  --bg: #f2f8f6;
   --panel: #ffffff;
-  --line: #d8dbe0;
-  --text: #1f2430;
-  --muted: #6b7280;
-  --accent: #2563eb;
-  --accent-dark: #1d4ed8;
-  --danger: #b91c1c;
+  --line: #d7e7e2;
+  --line-strong: #b6d2cb;
+  --text: #16302b;
+  --muted: #5b7a73;
+  --danger: #b3261e;
+  --danger-bg: #fdf1f0;
+  --radius: 8px;
 }
+
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   background: var(--bg);
   color: var(--text);
 }
-header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 20px; background: var(--panel);
-  border-bottom: 1px solid var(--line);
-  position: sticky; top: 0; z-index: 10;
-}
-header h1 { font-size: 18px; margin: 0; flex: 1; }
-main { padding: 20px; max-width: 900px; margin: 0 auto; }
 
-button {
-  font: inherit; padding: 8px 16px; border-radius: 6px;
-  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+::selection { background: var(--accent-weak); }
+
+/* --- ヘッダー --- */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 18px;
+  background: var(--accent);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
-button:hover { background: var(--accent-dark); }
-button.secondary { background: #fff; color: var(--text); border-color: var(--line); }
-button.secondary:hover { background: #eef1f5; }
-button.ghost { background: none; border: none; color: var(--muted); }
-button:disabled { opacity: .5; cursor: not-allowed; }
+header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  letter-spacing: .02em;
+}
+/* ヘッダー内のボタンは濃い背景の上に載るため、白の輪郭で統一する */
+header button {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .55);
+  padding: 4px 12px;
+  font-size: 12.5px;
+}
+header button:hover { background: rgba(255, 255, 255, .16); border-color: #fff; }
+header button.ghost { border-color: transparent; padding-left: 6px; padding-right: 8px; }
+header button.ghost:hover { background: rgba(255, 255, 255, .16); }
+
+main {
+  padding: 16px 20px 28px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+/* --- カード --- */
 
 .card {
-  background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 20px; margin-bottom: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
 }
-.card.clickable { cursor: pointer; }
-.card.clickable:hover { border-color: var(--accent); }
-.card h2 { margin: 0 0 6px; font-size: 16px; }
-.card p { margin: 0; color: var(--muted); font-size: 13px; }
-
-.field { margin-bottom: 14px; }
-.field > label { display: block; font-size: 13px; margin-bottom: 4px; font-weight: 600; }
-.field .hint { font-weight: normal; color: var(--muted); margin-left: 6px; }
-input[type="text"], input[type="email"], textarea, select {
-  width: 100%; padding: 8px 10px; font: inherit;
-  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+.card.clickable {
+  cursor: pointer;
+  transition: border-color .12s, background-color .12s;
 }
-textarea { resize: vertical; min-height: 80px; }
-input.invalid, textarea.invalid { border-color: var(--danger); background: #fef2f2; }
-.row { display: flex; gap: 12px; }
-.row > * { flex: 1; }
+.card.clickable:hover {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+.card h2 {
+  margin: 0 0 3px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
 
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* --- 入力 --- */
+
+.field { margin-bottom: 12px; }
+.field:last-child { margin-bottom: 0; }
+.field > label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.field .hint {
+  font-weight: normal;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+input[type="text"],
+input[type="email"],
+textarea,
+select {
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  transition: border-color .12s, box-shadow .12s;
+}
+input:hover, textarea:hover, select:hover { border-color: var(--line-strong); }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+textarea { resize: vertical; min-height: 72px; line-height: 1.65; }
+select { cursor: pointer; }
+
+input.invalid, textarea.invalid {
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+input.invalid:focus, textarea.invalid:focus {
+  box-shadow: 0 0 0 3px #f7dcda;
+}
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; min-width: 0; }
+
+/* --- ボタン --- */
+
+button {
+  font: inherit;
+  font-size: 13.5px;
+  padding: 7px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s;
+}
+button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button:active { transform: translateY(1px); }
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-weak), 0 0 0 4px var(--accent);
+}
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+}
+button:disabled:hover { background: var(--accent); border-color: var(--accent); }
+
+button.secondary {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+button.secondary:hover { background: var(--accent-weak); border-color: var(--accent); }
+
+button.ghost {
+  background: none;
+  border-color: transparent;
+  color: var(--muted);
+}
+button.ghost:hover { background: var(--accent-weak); color: var(--text); }
+
+/* --- 場面などの選択チップ --- */
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
-  padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px;
-  background: #fff; color: var(--text); cursor: pointer; font-size: 14px;
+  padding: 5px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .12s, background-color .12s;
 }
-.chip.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chip:hover { border-color: var(--accent); background: var(--accent-weak); }
+.chip.selected {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.chip.selected:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-.actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-.error { color: var(--danger); font-size: 13px; margin-top: 8px; }
-.status { color: var(--muted); font-size: 13px; }
-.preview-body { min-height: 320px; font-family: "Yu Gothic UI", monospace; }
+/* --- 補助テキスト --- */
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.error {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid #f0cfcc;
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  font-size: 12.5px;
+  margin-top: 8px;
+}
+.status {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* 生成した本文。メールとして読むので行間を広めに取る */
+.preview-body {
+  min-height: 300px;
+  line-height: 1.8;
+}
+
+/* --- トースト --- */
 
 .toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: #1f2430; color: #fff; padding: 10px 20px; border-radius: 6px; font-size: 14px;
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  max-width: 80%;
+  text-align: center;
 }
