@@ -62,8 +62,9 @@ function classifyError(err) {
   return { code: 'unknown', message: '文面の作成に失敗しました。もう一度お試しください。' };
 }
 
-// 本文を生成する。成功なら { ok:true, body }、失敗なら { ok:false, code, message }。
-async function generateBody({ apiKey, system, user }) {
+// テキストを生成する汎用関数。成功なら { ok:true, body, usage }、失敗なら { ok:false, code, message }。
+// メール本文（generateBody）とタスクのAI連携（Task 22）の両方がこれを呼ぶ。
+async function generateText({ apiKey, system, user, maxTokens }) {
   if (!apiKey) {
     return { ok: false, code: 'no_key', message: 'Claude APIキーが設定されていません。設定画面で登録してください。' };
   }
@@ -71,7 +72,7 @@ async function generateBody({ apiKey, system, user }) {
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens || MAX_TOKENS,
       output_config: { effort: 'low' },
       system,
       messages: [{ role: 'user', content: user }],
@@ -95,4 +96,12 @@ async function generateBody({ apiKey, system, user }) {
   }
 }
 
-module.exports = { MODEL, extractText, classifyError, generateBody };
+// 本文を生成する。generateText を既定のトークン数で呼ぶだけ。
+// 既存のメール機能が戻り値の形・挙動に依存しているため、ここは絶対に変えない。
+async function generateBody({ apiKey, system, user }) {
+  return generateText({ apiKey, system, user, maxTokens: MAX_TOKENS });
+}
+
+module.exports = {
+  MODEL, extractText, classifyError, generateText, generateBody,
+};
