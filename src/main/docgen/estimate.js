@@ -3,10 +3,13 @@
 // メール文面作成（1通数円）とは桁が違う（参考資料がそのままAPIに渡るため）ので、
 // 実行前に確認を挟むかどうかの判断材料にする（設計書 4-6）。
 //
-// 料金定数を二重に持たないよう、src/main/usage.js が既に公開している
-// estimateCostJpy（トークン数→円換算）をそのまま再利用する。
+// 料金定数を二重に持たないよう、src/main/models.js が公開している
+// costJpy（モデルごとの単価による円換算）をそのまま利用する。
 
-const { estimateCostJpy } = require('../usage');
+const { FEATURES, costJpy } = require('../models');
+
+// 資料作成の既定モデル（設定で変えていないときの見積もりに使う）。
+const DEFAULT_DOCGEN_MODEL_ID = (FEATURES.find((f) => f.id === 'docgen') || {}).defaultModel;
 
 // これを超えたら実行前に確認ダイアログを出す（設計書 4-6: 「3万字を超えたら」＝厳密に超過）。
 const CONFIRM_CHARS = 30000;
@@ -31,15 +34,16 @@ const PROMPT_OVERHEAD_TOKENS = 600;
 // 構成案・本文の2回のAPI呼び出し分の概算費用（円）。
 // 参考資料は2回とも丸ごと送るので、入力は毎回かかる。
 // 本文の回は、確定した構成案も一緒に送る分を足す。
-function estimateYen(chars) {
+// modelIdを省略したときは資料作成の既定モデル（Sonnet 5）で見積もる。
+function estimateYen(chars, modelId = DEFAULT_DOCGEN_MODEL_ID) {
   const src = estimateTokens(chars);
   if (src <= 0) return 0;
 
-  const outline = estimateCostJpy({
+  const outline = costJpy(modelId, {
     inputTokens: src + PROMPT_OVERHEAD_TOKENS,
     outputTokens: OUTLINE_OUTPUT_TOKENS,
   });
-  const body = estimateCostJpy({
+  const body = costJpy(modelId, {
     inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
     outputTokens: BODY_OUTPUT_TOKENS,
   });

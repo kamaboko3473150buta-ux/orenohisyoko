@@ -26,6 +26,47 @@ test('保存していない状態では既定値が返る', () => {
   assert.strictEqual(s.defaultMailer, 'outlook');
 });
 
+test('保存していない状態では、機能ごとの既定モデルが返る（資料作成だけSonnet 5）', () => {
+  const s = loadSettings(tmpFile(), fakeCrypto);
+  assert.strictEqual(s.models.mail, 'claude-opus-5');
+  assert.strictEqual(s.models.task, 'claude-opus-5');
+  assert.strictEqual(s.models.docgen, 'claude-sonnet-5');
+});
+
+test('modelsを部分更新しても、他の機能の設定が消えない', () => {
+  const f = tmpFile();
+  saveSettings(f, { models: { docgen: 'claude-haiku-4-5' } }, fakeCrypto);
+  const s = loadSettings(f, fakeCrypto);
+  assert.strictEqual(s.models.docgen, 'claude-haiku-4-5', '変えた方が反映される');
+  assert.strictEqual(s.models.mail, 'claude-opus-5', 'メールは既定のまま残る');
+  assert.strictEqual(s.models.task, 'claude-opus-5', 'タスクは既定のまま残る');
+});
+
+test('modelsを2回に分けて更新しても、両方の変更が残る', () => {
+  const f = tmpFile();
+  saveSettings(f, { models: { mail: 'claude-sonnet-5' } }, fakeCrypto);
+  saveSettings(f, { models: { docgen: 'claude-haiku-4-5' } }, fakeCrypto);
+  const s = loadSettings(f, fakeCrypto);
+  assert.strictEqual(s.models.mail, 'claude-sonnet-5');
+  assert.strictEqual(s.models.docgen, 'claude-haiku-4-5');
+});
+
+test('modelsに未知のモデルIDが保存されていても、その機能の既定に倒れて落ちない', () => {
+  const f = tmpFile();
+  saveSettings(f, { models: { docgen: 'no-such-model' } }, fakeCrypto);
+  const s = loadSettings(f, fakeCrypto);
+  assert.strictEqual(s.models.docgen, 'claude-sonnet-5', '資料作成の既定に倒れる（Opus 5にはならない）');
+});
+
+test('modelsを更新しても、他の設定項目（署名など）は消えない', () => {
+  const f = tmpFile();
+  saveSettings(f, { signature: '署名テスト' }, fakeCrypto);
+  saveSettings(f, { models: { mail: 'claude-haiku-4-5' } }, fakeCrypto);
+  const s = loadSettings(f, fakeCrypto);
+  assert.strictEqual(s.signature, '署名テスト');
+  assert.strictEqual(s.models.mail, 'claude-haiku-4-5');
+});
+
 test('APIキーを保存すると取り出せる', () => {
   const f = tmpFile();
   saveSettings(f, { apiKey: 'sk-ant-test123' }, fakeCrypto);

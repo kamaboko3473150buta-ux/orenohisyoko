@@ -64,14 +64,18 @@ function classifyError(err) {
 
 // テキストを生成する汎用関数。成功なら { ok:true, body, usage }、失敗なら { ok:false, code, message }。
 // メール本文（generateBody）とタスクのAI連携（Task 22）の両方がこれを呼ぶ。
-async function generateText({ apiKey, system, user, maxTokens }) {
+// model は省略可（省略時はこれまでどおり MODEL＝claude-opus-5）。既存の呼び出しを壊さないため。
+async function generateText({
+  apiKey, system, user, maxTokens, model,
+}) {
   if (!apiKey) {
     return { ok: false, code: 'no_key', message: 'Claude APIキーが設定されていません。設定画面で登録してください。' };
   }
+  const usedModel = model || MODEL;
   const client = new Anthropic({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
   try {
     const res = await client.messages.create({
-      model: MODEL,
+      model: usedModel,
       max_tokens: maxTokens || MAX_TOKENS,
       output_config: { effort: 'low' },
       system,
@@ -84,8 +88,10 @@ async function generateText({ apiKey, system, user, maxTokens }) {
     if (!body) {
       return { ok: false, code: 'empty', message: '文面が空で返ってきました。もう一度お試しください。' };
     }
-    // 利用状況の記録（Task 19）に使う。無ければ0（SDKのレスポンス形式が変わった場合の保険）。
+    // 利用状況の記録（Task 19・32）に使う。無ければ0（SDKのレスポンス形式が変わった場合の保険）。
+    // model も含める。どのモデルで使ったかが分からないと、モデル別の費用集計ができないため。
     const usage = {
+      model: usedModel,
       inputTokens: (res.usage && res.usage.input_tokens) || 0,
       outputTokens: (res.usage && res.usage.output_tokens) || 0,
     };
@@ -97,9 +103,13 @@ async function generateText({ apiKey, system, user, maxTokens }) {
 }
 
 // 本文を生成する。generateText を既定のトークン数で呼ぶだけ。
-// 既存のメール機能が戻り値の形・挙動に依存しているため、ここは絶対に変えない。
-async function generateBody({ apiKey, system, user }) {
-  return generateText({ apiKey, system, user, maxTokens: MAX_TOKENS });
+// 戻り値の形・挙動は既存のメール機能が依存しているため変えない。model は追加のオプション。
+async function generateBody({
+  apiKey, system, user, model,
+}) {
+  return generateText({
+    apiKey, system, user, maxTokens: MAX_TOKENS, model,
+  });
 }
 
 module.exports = {

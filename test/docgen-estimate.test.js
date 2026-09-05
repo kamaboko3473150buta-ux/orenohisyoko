@@ -44,3 +44,15 @@ test('needsConfirm: CONFIRM_CHARSちょうどはfalse、1文字超えるとtrue�
 test('needsConfirm: CONFIRM_CHARSは3万字', () => {
   assert.strictEqual(CONFIRM_CHARS, 30000);
 });
+
+test('estimateYen: モデルを指定すると、そのモデルの単価で計算される（Haikuの方が安い）', () => {
+  const sonnet = estimateYen(10000, 'claude-sonnet-5');
+  const opus = estimateYen(10000, 'claude-opus-5');
+  const haiku = estimateYen(10000, 'claude-haiku-4-5');
+  assert.ok(opus > sonnet, 'OpusはSonnetより高い');
+  assert.ok(sonnet > haiku, 'SonnetはHaikuより高い');
+});
+
+test('estimateYen: モデル省略時は資料作成の既定（Sonnet 5）で計算される', () => {
+  assert.strictEqual(estimateYen(10000), estimateYen(10000, 'claude-sonnet-5'));
+});

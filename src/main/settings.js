@@ -3,13 +3,33 @@
 // safeStorage は呼び出し側から渡す（テストで差し替えられるようにするため）。
 
 const { readJson, writeJson } = require('./jsonfile');
+const { FEATURES, findModel } = require('./models');
+
+// 機能ごとの既定モデル（FEATURESのdefaultModelそのまま）。
+// 例: { mail: 'claude-opus-5', task: 'claude-opus-5', docgen: 'claude-sonnet-5' }
+const DEFAULT_MODELS = FEATURES.reduce((acc, f) => ({ ...acc, [f.id]: f.defaultModel }), {});
 
 const DEFAULT_SETTINGS = {
   signature: '',
   defaultTone: 'formal_external',
   defaultMailer: 'outlook',
   defaultTaskInput: 'manual',
+  models: DEFAULT_MODELS,
 };
+
+// 保存されているmodelsに欠け・未知の値があっても、機能ごとの既定へ倒す
+// （資料作成の既定はSonnet 5であり、一律Opus 5に倒すと既定が変わってしまうため、
+// findModelの汎用フォールバックではなく、機能ごとのdefaultModelを使う）。
+// 部分更新で片方の機能だけ変えても、他の機能の設定が消えないようにするため
+// 常に全機能ぶんそろえて返す。
+function normalizeModels(raw) {
+  const r = (raw && typeof raw === 'object') ? raw : {};
+  return FEATURES.reduce((acc, f) => {
+    const saved = r[f.id];
+    const isKnown = typeof saved === 'string' && findModel(saved).id === saved;
+    return { ...acc, [f.id]: isKnown ? saved : f.defaultModel };
+  }, {});
+}
 
 // ファイルに保存する形:
 // { apiKeyEncrypted: '<base64>' | null, apiKeyPlain: '<平文>' | null, signature, defaultTone, defaultMailer }
@@ -22,6 +42,7 @@ function loadSettings(filePath, crypto) {
     defaultMailer: raw.defaultMailer || DEFAULT_SETTINGS.defaultMailer,
     // 未知の値は既定の'manual'に倒す（誤った値でAI取り込みが勝手に選ばれないように）。
     defaultTaskInput: raw.defaultTaskInput === 'ai' ? 'ai' : DEFAULT_SETTINGS.defaultTaskInput,
+    models: normalizeModels(raw.models),
     apiKey: '',
     encrypted: false,
   };
@@ -59,6 +80,12 @@ function saveSettings(filePath, patch, crypto) {
   }
   for (const field of ['signature', 'defaultTone', 'defaultMailer', 'defaultTaskInput']) {
     if (Object.prototype.hasOwnProperty.call(patch, field)) next[field] = patch[field];
+  }
+
+  // modelsは機能ごとのキー（mail/task/docgen）を持つ入れ子のオブジェクト。
+  // 片方の機能だけ渡しても他の機能の設定が消えないよう、既存の値にマージする。
+  if (Object.prototype.hasOwnProperty.call(patch, 'models')) {
+    next.models = { ...(raw.models || {}), ...(patch.models || {}) };
   }
 
   writeJson(filePath, next);
