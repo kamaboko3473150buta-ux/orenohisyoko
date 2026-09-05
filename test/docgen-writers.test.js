@@ -5,7 +5,9 @@ const path = require('node:path');
 const os = require('node:os');
 const AdmZip = require('adm-zip');
 const { Document, Packer, ImageRun, Paragraph } = require('docx');
-const { buildHtml, writeDocx, writePresentationPptx } = require('../src/main/docgen/writers');
+const {
+  buildHtml, buildChartSvg, writeDocx, writePresentationPptx,
+} = require('../src/main/docgen/writers');
 const { docxTextFromXml, pptxTextFromXml } = require('../src/main/docgen/office-text');
 const { extractImages, MIN_BYTES } = require('../src/main/docgen/images');
 
@@ -223,6 +225,112 @@ test('buildHtml: meta・tableが型違い（文字列・null等）でも落ち�
     title: 'T',
     sections: [{ heading: 'H', table: { headers: [], rows: [] } }],
   }));
+});
+
+// ---- buildChartSvg（Task 43） ----
+
+function barChart() {
+  return {
+    type: 'bar',
+    title: '月別売上',
+    labels: ['1月', '2月', '3月'],
+    series: [{ name: '売上', values: [120, 150, 90] }],
+  };
+}
+
+test('buildChartSvg: bar/line/pieそれぞれで妥当な<svg>を返す', () => {
+  for (const type of ['bar', 'line', 'pie']) {
+    const svg = buildChartSvg({ ...barChart(), type });
+    assert.ok(svg.startsWith('<svg'), `${type}: <svg>で始まる`);
+    assert.ok(svg.trim().endsWith('</svg>'), `${type}: </svg>で終わる`);
+    assert.ok(svg.includes('xmlns="http://www.w3.org/2000/svg"'), `${type}: 名前空間がある`);
+  }
+});
+
+test('buildChartSvg: typeが3種以外ならbarとして描く（例外を投げない）', () => {
+  assert.doesNotThrow(() => buildChartSvg({ ...barChart(), type: 'radar' }));
+});
+
+test('buildChartSvg: ラベルの<script>や&がエスケープされる', () => {
+  const svg = buildChartSvg({
+    type: 'bar',
+    title: '<b>売上</b> & 実績',
+    labels: ['<script>alert(1)</script>', '正常'],
+    // 凡例は系列が2本以上のときだけ描くので、系列名のエスケープを見るには2本必要
+    series: [{ name: '<i>系列</i>', values: [1, 2] }, { name: '比較', values: [2, 1] }],
+  });
+  assert.ok(!svg.includes('<script>alert(1)</script>'), '生のscriptタグが残らない');
+  assert.ok(svg.includes('&lt;script&gt;'), 'ラベルがエスケープされている');
+  assert.ok(svg.includes('&lt;b&gt;売上&lt;/b&gt; &amp; 実績'), 'titleもエスケープされている');
+  assert.ok(svg.includes('&lt;i&gt;系列&lt;/i&gt;'), '凡例の系列名もエスケープされている');
+});
+
+test('buildChartSvg: 値が1件（項目1つ・系列1つ）でも落ちない', () => {
+  const svg = buildChartSvg({
+    type: 'pie', title: '内訳', labels: ['唯一'], series: [{ name: 'X', values: [42] }],
+  });
+  assert.ok(svg.includes('<svg'));
+  assert.ok(svg.includes('唯一'));
+});
+
+test('buildChartSvg: 値が全部0件（項目0）でも例外を投げず空のsvgを返す', () => {
+  assert.doesNotThrow(() => buildChartSvg({
+    type: 'bar', title: '', labels: [], series: [],
+  }));
+  const svg = buildChartSvg({ type: 'bar', title: '', labels: [], series: [] });
+  assert.ok(svg.startsWith('<svg'));
+});
+
+test('buildChartSvg: chartがnull/undefined/型違いでも例外を投げず空のsvgを返す', () => {
+  for (const bad of [null, undefined, '文字列', 123]) {
+    assert.doesNotThrow(() => buildChartSvg(bad));
+    assert.ok(buildChartSvg(bad).startsWith('<svg'));
+  }
+});
+
+test('buildChartSvg: 複数系列の凡例（系列名）が入る', () => {
+  const svg = buildChartSvg({
+    type: 'bar',
+    labels: ['1月', '2月'],
+    series: [
+      { name: '今年', values: [100, 120] },
+      { name: '昨年', values: [90, 95] },
+    ],
+  });
+  assert.ok(svg.includes('今年'));
+  assert.ok(svg.includes('昨年'));
+});
+
+test('buildChartSvg: widthとheightを指定できる（省略時は既定値になる）', () => {
+  const svgDefault = buildChartSvg(barChart());
+  assert.ok(svgDefault.includes('width="480"') && svgDefault.includes('height="320"'));
+  const svgCustom = buildChartSvg(barChart(), { width: 200, height: 100 });
+  assert.ok(svgCustom.includes('width="200"') && svgCustom.includes('height="100"'));
+});
+
+test('buildChartSvg: 純粋関数（同じ入力なら同じ出力）', () => {
+  const chart = barChart();
+  assert.strictEqual(buildChartSvg(chart), buildChartSvg(chart));
+  assert.strictEqual(buildChartSvg(chart), buildChartSvg(JSON.parse(JSON.stringify(chart))));
+});
+
+test('buildHtml: sectionのchartがsvgとして埋め込まれる', () => {
+  const html = buildHtml({
+    title: 'T',
+    sections: [{ heading: '売上推移', chart: barChart() }],
+  });
+  assert.ok(html.includes('<svg'), 'chartがsvgとして入る');
+  assert.ok(html.includes('月別売上'));
+  assert.ok(html.includes('1月'));
+});
+
+test('buildHtml: chartが無いセクションはsvgを出さない', () => {
+  const html = buildHtml({ title: 'T', sections: [{ heading: 'H', paragraphs: ['p'] }] });
+  assert.ok(!html.includes('<svg'));
+});
+
+test('buildHtml: chartが型違い（文字列等）でも落ちない', () => {
+  assert.doesNotThrow(() => buildHtml({ title: 'T', sections: [{ heading: 'H', chart: 'not-an-object' }] }));
 });
 
 // ---- writeDocx: 実際に.docxとして書き出し、office-text.jsで読み返す ----

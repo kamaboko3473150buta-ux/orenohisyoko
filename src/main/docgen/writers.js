@@ -12,13 +12,21 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {
-  Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType,
+  Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType, ImageRun,
 } = require('docx');
 const PptxGenJS = require('pptxgenjs');
 
 // 日本語（游ゴシック）が文字化けしないよう明示するフォント。
 // buildHtml と同じ考え方（Windows標準搭載のフォントを優先し、無ければMeiryo系にフォールバック）。
 const SLIDE_FONT = 'Yu Gothic';
+
+// グラフ（Task 43）の配色。資料の配色（濃紺 #1F3864系）に合わせ、系列が複数あるときは
+// 明度違いの濃紺〜青系で塗り分ける。'#'を含まない16進6桁（pptxgenjsの色指定と同じ形）。
+const CHART_COLORS = ['1F3864', '2E5395', '8FAADC', 'BDD7EE', '548235', '9DC3E6'];
+
+function chartColorHex(i) {
+  return CHART_COLORS[i % CHART_COLORS.length];
+}
 
 // mail-compose/draft.js の escapeHtml と同じ考え方（あちらを import せず、
 // docgen 側で完結させるためここに複製する）。
@@ -88,8 +96,47 @@ function normalizeMeta(v) {
   return v.map(normalizeMetaItem).filter((m) => m !== null);
 }
 
+// グラフ（Task 43）。docgen/prompt.js の sanitizeChart と同じ考え方の複製
+// （writers.js を prompt.js に依存させたくないこと、画面で編集された後のdocが
+// そのまま来ることもあり、prompt.jsの正規化を必ず通るとは限らないため）。
+// labelsとseries.valuesの長さが合わない・数値でない値が混ざる系列は丸ごと捨てる。
+// 系列が0本になればchart自体をnullにする。例外は投げない。
+const CHART_TYPES = ['bar', 'line', 'pie'];
+
+function normalizeChartSeries(v, expectedLength) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const name = sanitizeString(v.name);
+  const rawValues = Array.isArray(v.values) ? v.values : null;
+  if (!rawValues || rawValues.length !== expectedLength) return null;
+  const values = [];
+  for (const n of rawValues) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+    values.push(n);
+  }
+  return { name, values };
+}
+
+function normalizeChart(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const rawType = typeof v.type === 'string' ? v.type : '';
+  const type = CHART_TYPES.includes(rawType) ? rawType : 'bar';
+  const title = sanitizeString(v.title);
+  const labels = sanitizeStringArray(v.labels);
+  if (!labels.length) return null;
+  const rawSeries = Array.isArray(v.series) ? v.series : [];
+  const series = [];
+  for (const s of rawSeries) {
+    const sane = normalizeChartSeries(s, labels.length);
+    if (sane) series.push(sane);
+  }
+  if (!series.length) return null;
+  return {
+    type, title, labels, series,
+  };
+}
+
 // doc（想定外の形も含む）から、出力に使える形のmeta・セクション一覧を作る。
-// heading・paragraphs・bullets・table が全部空になるセクションは、出す意味が無いので捨てる。
+// heading・paragraphs・bullets・table・chart が全部空になるセクションは、出す意味が無いので捨てる。
 function normalizeDoc(doc) {
   const title = sanitizeString(doc && doc.title);
   const meta = normalizeMeta(doc && doc.meta);
@@ -101,9 +148,10 @@ function normalizeDoc(doc) {
     const paragraphs = sanitizeStringArray(s.paragraphs);
     const bullets = sanitizeStringArray(s.bullets);
     const table = normalizeTable(s.table);
-    if (!heading && !paragraphs.length && !bullets.length && !table) continue;
+    const chart = normalizeChart(s.chart);
+    if (!heading && !paragraphs.length && !bullets.length && !table && !chart) continue;
     sections.push({
-      heading, paragraphs, bullets, table,
+      heading, paragraphs, bullets, table, chart,
     });
   }
   return { title, meta, sections };
@@ -129,6 +177,190 @@ function buildTableHtml(table) {
   return `<table class="data">\n<thead>\n${thead}\n</thead>\n<tbody>\n${tbody}\n</tbody>\n</table>`;
 }
 
+// ---- グラフのSVG描画（Task 43） ----------------------------------------------------
+//
+// buildChartSvg(chart, opts) は純粋関数（同じ入力なら同じ出力・副作用なし）。
+// PDF出力ではこのSVGをそのままHTMLに埋め込み、Word出力ではElectronのBrowserWindowで
+// これを読み込みcapturePageでPNG化する（writers.js内のrenderChartPng・writePdfと同じ仕組み）。
+// chart はここに来る時点で normalizeChart 済み（labels・series.valuesの長さが揃っている）
+// 前提だが、念のため呼び出し側の想定外（null・空）にも落ちないようにしておく。
+// ラベルは本文からそのまま入るため、必ずSVGとしてエスケープする（escapeHtmlを流用。
+// SVGのテキストノードでも &, <, >, " をエスケープすれば安全なのは同じ）。
+
+function formatAxisNumber(n) {
+  if (!Number.isFinite(n)) return '0';
+  const rounded = Math.round(n * 100) / 100;
+  return String(rounded);
+}
+
+// 棒・折れ線グラフの本体（軸・凡例・データ）を組み立てる。
+function buildAxisChartSvgBody(chart, width, height, type) {
+  const { labels, series, title } = chart;
+  const legendH = series.length > 1 ? 22 : 0;
+  const marginTop = (title ? 30 : 10) + legendH;
+  const marginBottom = 34;
+  const marginLeft = 46;
+  const marginRight = 16;
+  const plotX = marginLeft;
+  const plotY = marginTop;
+  const plotW = Math.max(10, width - marginLeft - marginRight);
+  const plotH = Math.max(10, height - plotY - marginBottom);
+
+  const values = series.flatMap((s) => s.values);
+  const maxVal = Math.max(0, ...values);
+  const minVal = Math.min(0, ...values);
+  const range = (maxVal - minVal) || 1;
+  const valueToY = (v) => plotY + plotH - ((v - minVal) / range) * plotH;
+  const zeroY = valueToY(0);
+
+  const parts = [];
+
+  if (title) {
+    parts.push(`<text x="${width / 2}" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="#1F3864">${escapeHtml(title)}</text>`);
+  }
+
+  if (series.length > 1) {
+    const legendY = (title ? 30 : 10) + 12;
+    let lx = marginLeft;
+    series.forEach((s, i) => {
+      const label = s.name || `系列${i + 1}`;
+      parts.push(`<rect x="${lx}" y="${legendY - 9}" width="10" height="10" fill="#${chartColorHex(i)}" />`);
+      parts.push(`<text x="${lx + 14}" y="${legendY}" font-size="11" fill="#333333">${escapeHtml(label)}</text>`);
+      lx += 24 + label.length * 8;
+    });
+  }
+
+  // 軸（縦軸・0の位置を通る横軸）
+  parts.push(`<line x1="${plotX}" y1="${plotY}" x2="${plotX}" y2="${plotY + plotH}" stroke="#999999" stroke-width="1" />`);
+  parts.push(`<line x1="${plotX}" y1="${zeroY.toFixed(1)}" x2="${plotX + plotW}" y2="${zeroY.toFixed(1)}" stroke="#999999" stroke-width="1" />`);
+
+  // 縦軸の目盛り（最小・中間・最大）
+  const ticks = Array.from(new Set([minVal, (minVal + maxVal) / 2, maxVal]));
+  ticks.forEach((v) => {
+    const ty = valueToY(v);
+    parts.push(`<line x1="${plotX - 4}" y1="${ty.toFixed(1)}" x2="${plotX}" y2="${ty.toFixed(1)}" stroke="#999999" stroke-width="1" />`);
+    parts.push(`<text x="${plotX - 8}" y="${(ty + 3).toFixed(1)}" font-size="10" fill="#666666" text-anchor="end">${escapeHtml(formatAxisNumber(v))}</text>`);
+  });
+
+  // 横軸のカテゴリラベル
+  const n = labels.length;
+  const slotW = plotW / n;
+  labels.forEach((label, i) => {
+    const cx = plotX + slotW * (i + 0.5);
+    parts.push(`<text x="${cx.toFixed(1)}" y="${(plotY + plotH + 16).toFixed(1)}" font-size="10" fill="#333333" text-anchor="middle">${escapeHtml(label)}</text>`);
+  });
+
+  if (type === 'bar') {
+    const groupPad = slotW * 0.15;
+    const groupW = slotW - groupPad * 2;
+    const barW = groupW / series.length;
+    series.forEach((s, si) => {
+      s.values.forEach((v, i) => {
+        const barX = plotX + slotW * i + groupPad + barW * si;
+        const vy = valueToY(v);
+        const top = Math.min(vy, zeroY);
+        const barH = Math.abs(vy - zeroY);
+        parts.push(`<rect x="${barX.toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(1, barW - 2).toFixed(1)}" height="${barH.toFixed(1)}" fill="#${chartColorHex(si)}" />`);
+      });
+    });
+  } else {
+    // line
+    series.forEach((s, si) => {
+      const points = s.values.map((v, i) => {
+        const cx = plotX + slotW * (i + 0.5);
+        const cy = valueToY(v);
+        return `${cx.toFixed(1)},${cy.toFixed(1)}`;
+      });
+      parts.push(`<polyline points="${points.join(' ')}" fill="none" stroke="#${chartColorHex(si)}" stroke-width="2" />`);
+      s.values.forEach((v, i) => {
+        const cx = plotX + slotW * (i + 0.5);
+        const cy = valueToY(v);
+        parts.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="#${chartColorHex(si)}" />`);
+      });
+    });
+  }
+
+  return parts.join('\n');
+}
+
+// 円グラフの本体を組み立てる。系列は先頭の1本だけを使う（内訳の円グラフに複数系列は
+// 意味を持たないため）。負の値は0扱いにする（扇形の角度計算が破綻しないようにするため）。
+function buildPieSvgBody(chart, width, height) {
+  const { labels, series, title } = chart;
+  const values = series[0].values.map((v) => Math.max(0, v));
+  const total = values.reduce((a, b) => a + b, 0);
+  const cx = width / 2;
+  const cy = height / 2 + (title ? 10 : 0);
+  const r = Math.min(width, height) * 0.3;
+
+  const parts = [];
+  if (title) {
+    parts.push(`<text x="${width / 2}" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="#1F3864">${escapeHtml(title)}</text>`);
+  }
+
+  if (total <= 0) {
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#F2F3F7" stroke="#C9D2E3" stroke-width="1" />`);
+    parts.push(`<text x="${cx}" y="${cy}" text-anchor="middle" font-size="11" fill="#666666">データなし</text>`);
+    return parts.join('\n');
+  }
+
+  let angle = -Math.PI / 2;
+  labels.forEach((label, i) => {
+    const v = values[i];
+    if (!(v > 0)) return;
+    const frac = v / total;
+    const nextAngle = angle + frac * Math.PI * 2;
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    const x2 = cx + r * Math.cos(nextAngle);
+    const y2 = cy + r * Math.sin(nextAngle);
+    const largeArc = (nextAngle - angle) > Math.PI ? 1 : 0;
+    if (frac >= 0.999) {
+      // 1系列のみ・全部が同じ項目のときはパスが潰れるため円そのものを描く。
+      parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#${chartColorHex(i)}" />`);
+    } else {
+      parts.push(`<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="#${chartColorHex(i)}" />`);
+    }
+    angle = nextAngle;
+  });
+
+  const legendX = Math.min(width - 10, cx + r + 20);
+  const legendStartY = cy - ((labels.length - 1) * 16) / 2;
+  labels.forEach((label, i) => {
+    const ly = legendStartY + i * 16;
+    const pct = Math.round((values[i] / total) * 100);
+    parts.push(`<rect x="${legendX}" y="${(ly - 9).toFixed(1)}" width="10" height="10" fill="#${chartColorHex(i)}" />`);
+    parts.push(`<text x="${(legendX + 14).toFixed(1)}" y="${ly.toFixed(1)}" font-size="11" fill="#333333">${escapeHtml(label)} ${pct}%</text>`);
+  });
+
+  return parts.join('\n');
+}
+
+// chart（{type, title, labels, series}）から棒・折れ線・円グラフのSVG文字列を組み立てる
+// 純粋関数。widthとheightは省略可（既定480x320）。chartが無い・系列や項目が0件など
+// 描けない形なら空のSVGを返す（例外は投げない）。
+function buildChartSvg(chart, opts = {}) {
+  const width = Number(opts.width) > 0 ? Number(opts.width) : 480;
+  const height = Number(opts.height) > 0 ? Number(opts.height) : 320;
+  const emptySvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}"></svg>`;
+
+  if (!chart || typeof chart !== 'object') return emptySvg;
+  const labels = Array.isArray(chart.labels) ? chart.labels : [];
+  const series = Array.isArray(chart.series) ? chart.series : [];
+  if (!labels.length || !series.length) return emptySvg;
+
+  const type = chart.type === 'line' || chart.type === 'pie' ? chart.type : 'bar';
+  const body = type === 'pie'
+    ? buildPieSvgBody({
+      ...chart, labels, series,
+    }, width, height)
+    : buildAxisChartSvgBody({
+      ...chart, labels, series,
+    }, width, height, type);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="Yu Gothic, Meiryo, sans-serif">\n${body}\n</svg>`;
+}
+
 // PDF化のためのHTMLを組み立てる純粋関数。
 // 生成された本文がそのまま入るため、HTML特殊文字は必ずエスケープする。
 // 日本語が豆腐（□）にならないよう、日本語フォントを明示する。
@@ -152,6 +384,9 @@ function buildHtml(doc) {
     }
     const tableHtml = buildTableHtml(section.table);
     if (tableHtml) body.push(tableHtml);
+    if (section.chart) {
+      body.push(`<div class="chart">${buildChartSvg(section.chart)}</div>`);
+    }
   }
 
   const pageTitle = escapeHtml(title || '資料');
@@ -180,6 +415,8 @@ function buildHtml(doc) {
   }
   table.meta th { background: #f2f2f2; white-space: nowrap; }
   table.data th { background: #f2f2f2; }
+  .chart { margin: 8px 0 16px; }
+  .chart svg { max-width: 100%; height: auto; }
 </style>
 </head>
 <body>
@@ -222,9 +459,73 @@ function buildDocxSectionTable(table) {
   return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...bodyRows] });
 }
 
+// グラフをPNG画像にする（Task 43）。writePdfと同じ仕組みで、ElectronのBrowserWindowに
+// SVGを読み込ませてcapturePageする。data URLではなく一時HTMLファイルを経由するのも
+// writePdfと同じ理由（長さ制限やエンコードの落とし穴を避けるため）。
+// browserWindowClassが渡らない・読み込みに失敗する等どんな理由でも、ここでは例外を
+// 投げずnullを返す（呼び出し側でグラフを飛ばして処理を続けるため）。
+async function renderSvgToPngBuffer(svg, browserWindowClass, { width, height }) {
+  if (typeof browserWindowClass !== 'function') return null;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>`
+    + `html,body{margin:0;padding:0;background:#ffffff;}</style></head><body>${svg}</body></html>`;
+  const tempHtmlPath = path.join(os.tmpdir(), `docgen-chart-${process.pid}-${crypto.randomUUID()}.html`);
+
+  let win = null;
+  try {
+    await fs.writeFile(tempHtmlPath, html, 'utf8');
+    win = new browserWindowClass({
+      show: false,
+      width,
+      height,
+      useContentSize: true,
+      webPreferences: {
+        sandbox: true,
+      },
+    });
+    await win.loadFile(tempHtmlPath);
+    const image = await win.webContents.capturePage();
+    return image.toPNG();
+  } catch (err) {
+    return null; // 画像化に失敗しても資料作成自体は止めない
+  } finally {
+    if (win && !win.isDestroyed()) {
+      win.destroy();
+    }
+    try {
+      await fs.unlink(tempHtmlPath);
+    } catch (err) {
+      // 一時ファイルの削除に失敗しても本処理自体は継続する
+    }
+  }
+}
+
+const DOCX_CHART_WIDTH = 480;
+const DOCX_CHART_HEIGHT = 300;
+
+// セクションのchartをWordに挿入する段落を作る。browserWindowClassが無い・画像化に
+// 失敗した場合はnullを返す（呼び出し側でグラフを飛ばす）。
+async function buildDocxChartParagraph(chart, browserWindowClass) {
+  if (!chart) return null;
+  const svg = buildChartSvg(chart, { width: DOCX_CHART_WIDTH, height: DOCX_CHART_HEIGHT });
+  const png = await renderSvgToPngBuffer(svg, browserWindowClass, {
+    width: DOCX_CHART_WIDTH, height: DOCX_CHART_HEIGHT,
+  });
+  if (!png) return null;
+  return new Paragraph({
+    children: [new ImageRun({
+      data: png,
+      transformation: { width: DOCX_CHART_WIDTH, height: DOCX_CHART_HEIGHT },
+      type: 'png',
+    })],
+  });
+}
+
 // Word用の段落一覧を組み立てる。タイトル→見出し1、セクション見出し→見出し2。
 // meta はタイトル直後に2列の表として置き、セクションのtableは段落・箇条書きのあとに置く。
-function buildDocxChildren(doc) {
+// グラフの画像化にはElectronが要るため、browserWindowClassが渡されたときだけ
+// section.chartをPNGにして差し込む（省略時はこれまでどおりグラフを飛ばす）。
+async function buildDocxChildren(doc, browserWindowClass) {
   const { title, meta, sections } = normalizeDoc(doc);
   const children = [];
 
@@ -253,6 +554,14 @@ function buildDocxChildren(doc) {
       children.push(sectionTable);
       children.push(new Paragraph({ text: '' }));
     }
+    if (section.chart) {
+      // eslint-disable-next-line no-await-in-loop -- 画像化は1枚ずつ順番に行えば十分
+      const chartParagraph = await buildDocxChartParagraph(section.chart, browserWindowClass);
+      if (chartParagraph) {
+        children.push(chartParagraph);
+        children.push(new Paragraph({ text: '' }));
+      }
+    }
   }
 
   // docx は中身が1件も無い文書でも作れるが、中身が空の.docxは開いたときに
@@ -263,9 +572,12 @@ function buildDocxChildren(doc) {
 }
 
 // doc を Word(.docx) ファイルに書き出す。
-async function writeDocx(doc, filePath) {
+// browserWindowClass は省略可（Task 43）。Electronの BrowserWindow クラスを渡すと、
+// セクションのグラフをPNG画像にして埋め込む。省略時はこれまでどおりグラフを飛ばして
+// 書き出す（既存の呼び出し・テストを壊さないため）。
+async function writeDocx(doc, filePath, browserWindowClass) {
   const document = new Document({
-    sections: [{ children: buildDocxChildren(doc) }],
+    sections: [{ children: await buildDocxChildren(doc, browserWindowClass) }],
   });
   const buffer = await Packer.toBuffer(document);
   await fs.writeFile(filePath, buffer);
@@ -393,7 +705,7 @@ const SLIDE_BODY_COLOR = '22262B';
 const SLIDE_CARD_BG = 'F2F3F7';
 const SLIDE_WHITE = 'FFFFFF';
 
-const SLIDE_LAYOUTS = ['title', 'statement', 'bullets', 'compare', 'image', 'closing'];
+const SLIDE_LAYOUTS = ['title', 'statement', 'bullets', 'compare', 'image', 'chart', 'closing'];
 const MAX_SLIDE_BULLETS = 5;
 
 function sanitizeSlideBullets(v) {
@@ -426,6 +738,7 @@ function normalizeSlide(s) {
   let bullets = sanitizeSlideBullets(s.bullets);
   let left = null;
   let right = null;
+  let chart = null;
 
   if (layout === 'compare') {
     left = sanitizeCompareSide(s.left);
@@ -444,10 +757,19 @@ function normalizeSlide(s) {
     }
   }
 
-  if (!heading && !lead && !bullets.length && !(left && right)) return null;
+  if (layout === 'chart') {
+    chart = normalizeChart(s.chart);
+    if (!chart) {
+      // グラフの数値は後から救済できる中身が無いため、compareと違い箇条書きへは
+      // 空のまま倒す（bulletsが元々あればそれは残す）。
+      layout = 'bullets';
+    }
+  }
+
+  if (!heading && !lead && !bullets.length && !(left && right) && !chart) return null;
 
   return {
-    layout, heading, note, lead, bullets, left, right,
+    layout, heading, note, lead, bullets, left, right, chart,
   };
 }
 
@@ -624,6 +946,58 @@ function drawImageSlide(pptx, slide, image) {
   return s;
 }
 
+// chart: 上部に見出し帯無しの見出しテキスト、その下にpptxgenjsのネイティブグラフ
+// （addChart）。Word/PDFのSVG（buildChartSvg）とは別経路で、PowerPointを開いた人が
+// 値を編集できるネイティブなグラフオブジェクトとして埋め込む。
+// normalizeSlideの時点でchartが無効ならbulletsに倒されるため、ここに来る
+// slide.chartは常に有効な形（labels・series.valuesの長さが揃っている）。
+function drawChartSlide(pptx, slide) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  if (slide.heading) {
+    s.addText(slide.heading, {
+      x: 0.5, y: 0.25, w: SLIDE_W_IN - 1.0, h: 0.7,
+      fontFace: SLIDE_FONT, fontSize: 22, bold: true, color: SLIDE_NAVY, valign: 'middle',
+    });
+  }
+
+  const { chart } = slide;
+  const chartType = chart.type === 'line' ? pptx.ChartType.line
+    : chart.type === 'pie' ? pptx.ChartType.pie
+    : pptx.ChartType.bar;
+
+  // 円グラフは1系列を項目ごとの扇形にするため、色は項目（labels）の数だけ用意する。
+  // 棒・折れ線は項目を横に並べ、系列ごとに色を変える。
+  const isPie = chart.type === 'pie';
+  const data = isPie
+    ? [{ name: chart.title || '内訳', labels: chart.labels, values: chart.series[0].values }]
+    : chart.series.map((series, i) => ({
+      name: series.name || `系列${i + 1}`,
+      labels: chart.labels,
+      values: series.values,
+    }));
+  const chartColors = isPie
+    ? chart.labels.map((_, i) => chartColorHex(i))
+    : chart.series.map((_, i) => chartColorHex(i));
+
+  s.addChart(chartType, data, {
+    x: 0.6,
+    y: 1.15,
+    w: SLIDE_W_IN - 1.2,
+    h: SLIDE_H_IN - 1.55,
+    chartColors,
+    showLegend: isPie || chart.series.length > 1,
+    legendPos: 'b',
+    legendColor: '333333',
+    catAxisLabelColor: '333333',
+    valAxisLabelColor: '333333',
+    dataLabelColor: '333333',
+    showTitle: false,
+  });
+
+  return s;
+}
+
 // closing: 中央に「まとめ」と箇条書き、下端に帯。
 function drawClosingSlide(pptx, slide) {
   const s = pptx.addSlide();
@@ -690,6 +1064,8 @@ async function writePresentationPptx(doc, images, filePath) {
       s = drawStatementSlide(pptx, slide);
     } else if (slide.layout === 'compare') {
       s = drawCompareSlide(pptx, slide);
+    } else if (slide.layout === 'chart') {
+      s = drawChartSlide(pptx, slide);
     } else if (slide.layout === 'closing') {
       s = drawClosingSlide(pptx, slide);
     } else {
@@ -702,5 +1078,5 @@ async function writePresentationPptx(doc, images, filePath) {
 }
 
 module.exports = {
-  buildHtml, writeDocx, writePdf, writePptx, writePresentationPptx,
+  buildHtml, buildChartSvg, writeDocx, writePdf, writePptx, writePresentationPptx,
 };

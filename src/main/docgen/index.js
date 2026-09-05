@@ -234,7 +234,9 @@ function register({ getSettings, getUsage, saveUsage }) {
           await writePptx(doc, filePath);
         }
       } else {
-        await writeDocx(doc, filePath);
+        // BrowserWindow を渡すと、グラフをPNGにして本文に埋め込める
+        // （渡さないとグラフは飛ばされる。writePdf と同じ仕組みを使う）。
+        await writeDocx(doc, filePath, BrowserWindow);
       }
       return { ok: true, filePath };
     } catch (err) {
