@@ -98,13 +98,13 @@ Views.docgen = {
         });
       }
 
-      function renderSummary() {
+      async function renderSummary() {
         const chars = totalChars();
         if (!chars) {
           summaryEl.textContent = '参考資料を添付すると、文字数と概算費用を表示します。';
           return;
         }
-        const { yen } = window.hishoko.docEstimate(chars, modelSelect.value);
+        const { yen } = await window.hishoko.docEstimate(chars, modelSelect.value);
         summaryEl.textContent = `合計 ${chars.toLocaleString()}字 / 概算 約${Math.round(yen)}円（構成案・本文の2回分）`;
       }
 
@@ -146,7 +146,7 @@ Views.docgen = {
       outlineBtn.addEventListener('click', async () => {
         errorEl.hidden = true;
         const chars = totalChars();
-        const est = window.hishoko.docEstimate(chars, modelSelect.value);
+        const est = await window.hishoko.docEstimate(chars, modelSelect.value);
         // 3万字を超えるときは、実行前に概算金額を示して確認を取る
         // （意図しない高額課金を防ぐため。設計書4-6・要件で最優先とされている点）。
         if (est.needsConfirm) {

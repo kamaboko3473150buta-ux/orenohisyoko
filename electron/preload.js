@@ -1,8 +1,9 @@
 // electron/preload.js
 const { contextBridge, ipcRenderer } = require('electron');
-// estimate.js はElectronに依存しない純粋関数のみを持つモジュールなので、
-// IPCを増やさずpreload（Node実行）から直接呼べる。料金の定数はmodels.js一本化のまま。
-const { estimateYen, needsConfirm } = require('../src/main/docgen/estimate');
+// preload はサンドボックスで動くため、electron 以外の require は使えない。
+// ここで普通のファイルを require すると preload 全体が失敗し、
+// window.hishoko そのものが作られなくなる（実際にそれで全画面が壊れた）。
+// 概算費用の計算もメインプロセス側に置き、IPC で取りに行く。
 
 contextBridge.exposeInMainWorld('hishoko', {
   // 設定（APIキーそのものは受け取らない）
@@ -51,9 +52,6 @@ contextBridge.exposeInMainWorld('hishoko', {
   docOutline: (args) => ipcRenderer.invoke('doc:outline', args),
   docBody: (args) => ipcRenderer.invoke('doc:body', args),
   docSave: (args) => ipcRenderer.invoke('doc:save', args),
-  // 添付の文字数からの概算費用（同期・IPC無し）。モデルを変えるたびに画面から呼び直す。
-  docEstimate: (chars, modelId) => ({
-    yen: estimateYen(chars, modelId),
-    needsConfirm: needsConfirm(chars),
-  }),
+  // 添付の文字数からの概算費用。モデルを変えるたびに画面から呼び直す。
+  docEstimate: (chars, modelId) => ipcRenderer.invoke('doc:estimate', { chars, modelId }),
 });

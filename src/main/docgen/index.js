@@ -10,7 +10,9 @@ const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
 } = require('./prompt');
-const { OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS } = require('./estimate');
+const {
+  OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS, estimateYen, needsConfirm,
+} = require('./estimate');
 const { writeDocx, writePdf, writePptx } = require('./writers');
 const { generateText } = require('../claude');
 const { addUsage } = require('../usage');
@@ -54,6 +56,13 @@ function register({ getSettings, getUsage, saveUsage }) {
   });
 
   // 選んだファイルをまとめて読み取る。1件読めなくても他は続ける（readers.js側の方針）。
+  // 添付の文字数からの概算費用。preload はサンドボックスでファイルを require できないため、
+  // 計算はここ（メインプロセス）で行って画面に返す。
+  ipcMain.handle('doc:estimate', (_e, { chars, modelId } = {}) => ({
+    yen: estimateYen(chars, modelId),
+    needsConfirm: needsConfirm(chars),
+  }));
+
   ipcMain.handle('doc:readFiles', async (_e, { filePaths } = {}) => {
     const results = await readFiles(filePaths);
     return { results };
