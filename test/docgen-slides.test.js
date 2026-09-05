@@ -251,3 +251,31 @@ test('parseDeckJson: wantsImageは真偽値以外なら false になる', () => 
   assert.strictEqual(deck.slides[1].wantsImage, false);
   assert.strictEqual(deck.slides[2].wantsImage, true);
 });
+
+// compareが片側しか無いときに箇条書きへ倒すのは正しいが、
+// そのとき片側の中身まで捨てると、料金を払って作らせた内容が消えてしまう。
+test('compareが片側だけのとき、その中身を箇条書きとして引き継ぐ', () => {
+  const raw = JSON.stringify({
+    title: 'T',
+    slides: [{
+      layout: 'compare',
+      heading: '現行と新方式',
+      left: { heading: '現行', bullets: ['手入力が二重', '月40時間'] },
+    }],
+  });
+  const { deck } = parseDeckJson(raw);
+  const slide = deck.slides.find((s) => s.heading === '現行と新方式');
+  assert.strictEqual(slide.layout, 'bullets', '箇条書きに倒れる');
+  assert.deepStrictEqual(slide.bullets, ['手入力が二重', '月40時間'], '中身が残る');
+});
+
+test('compareの両側とも中身が無ければ、これまでどおり空の箇条書きになる', () => {
+  const raw = JSON.stringify({
+    title: 'T',
+    slides: [{ layout: 'compare', heading: '見出しだけ' }],
+  });
+  const { deck } = parseDeckJson(raw);
+  const slide = deck.slides.find((s) => s.heading === '見出しだけ');
+  assert.strictEqual(slide.layout, 'bullets');
+  assert.deepStrictEqual(slide.bullets, []);
+});

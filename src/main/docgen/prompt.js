@@ -401,7 +401,14 @@ function sanitizeSlide(s) {
     if (left && right) {
       return { layout, ...base, left, right };
     }
-    layout = 'bullets'; // left/rightが欠けていたら箇条書きに倒す
+    // left/rightが片方しか無ければ箇条書きに倒す。
+    // このとき片側に書かれていた内容を捨てると、料金を払って作らせた中身が
+    // そのまま消えてしまうので、拾えるものは箇条書きとして引き継ぐ。
+    const salvaged = [...((left && left.bullets) || []), ...((right && right.bullets) || [])];
+    if (salvaged.length) {
+      return { layout: 'bullets', ...base, bullets: sanitizeSlideBullets(salvaged) };
+    }
+    layout = 'bullets';
   }
 
   if (layout === 'title' || layout === 'statement' || layout === 'image') {
