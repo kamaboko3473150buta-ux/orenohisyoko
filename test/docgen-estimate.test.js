@@ -23,10 +23,16 @@ test('estimateYen: 文字数が増えるほど概算金額も増える', () => {
   assert.ok(estimateYen(20000) > estimateYen(10000));
 });
 
-test('estimateYen: 文字数が2倍なら金額も2倍になる（比例関係）', () => {
-  const y1 = estimateYen(5000);
-  const y2 = estimateYen(10000);
-  assert.strictEqual(y2, y1 * 2);
+test('estimateYen: 参考資料が無くても、資料を書く分の費用はかかる', () => {
+  // 出力トークン（＝出来上がる資料）の分は、参考資料の大きさに関係なくかかる
+  assert.ok(estimateYen(1) > 0);
+});
+
+test('estimateYen: 参考資料が2倍でも金額は2倍にならない（出力分は増えないため）', () => {
+  const y1 = estimateYen(10000);
+  const y2 = estimateYen(20000);
+  assert.ok(y2 > y1, '増えはする');
+  assert.ok(y2 < y1 * 2, '2倍未満に収まる');
 });
 
 test('needsConfirm: CONFIRM_CHARSちょうどはfalse、1文字超えるとtrueになる', () => {

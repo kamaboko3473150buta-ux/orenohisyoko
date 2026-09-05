@@ -19,17 +19,38 @@ function estimateTokens(chars) {
   return Math.ceil(n);
 }
 
+// 生成される資料の分量の見込み（トークン）。参考資料が大きくても、
+// 出来上がる資料の長さはそれに比例しない（A4数枚程度に収まる）ため、固定値で見る。
+// 出力は入力の5倍の単価なので、ここを入力と同数にすると概算が数倍に膨らんでしまう。
+const OUTLINE_OUTPUT_TOKENS = 1200;
+const BODY_OUTPUT_TOKENS = 5000;
+
+// プロンプトの指示文そのものの分（種類ごとの作法・出力形式の指定など）。
+const PROMPT_OVERHEAD_TOKENS = 600;
+
 // 構成案・本文の2回のAPI呼び出し分の概算費用（円）。
-// 参考資料は2回とも丸ごと送るため入力トークンは chars 相当かかる。生成される文章量も
-// 参考資料と同程度になり得るという前提で出力トークンも同数と見て、安全側（多め）に見積もる。
+// 参考資料は2回とも丸ごと送るので、入力は毎回かかる。
+// 本文の回は、確定した構成案も一緒に送る分を足す。
 function estimateYen(chars) {
-  const tokens = estimateTokens(chars);
-  const perCallJpy = estimateCostJpy({ inputTokens: tokens, outputTokens: tokens });
-  return perCallJpy * 2; // 構成案 + 本文
+  const src = estimateTokens(chars);
+  if (src <= 0) return 0;
+
+  const outline = estimateCostJpy({
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS,
+    outputTokens: OUTLINE_OUTPUT_TOKENS,
+  });
+  const body = estimateCostJpy({
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
+    outputTokens: BODY_OUTPUT_TOKENS,
+  });
+  return outline + body;
 }
 
 function needsConfirm(chars) {
   return (Number(chars) || 0) > CONFIRM_CHARS;
 }
 
-module.exports = { CONFIRM_CHARS, estimateTokens, estimateYen, needsConfirm };
+module.exports = {
+  CONFIRM_CHARS, OUTLINE_OUTPUT_TOKENS, BODY_OUTPUT_TOKENS, PROMPT_OVERHEAD_TOKENS,
+  estimateTokens, estimateYen, needsConfirm,
+};
