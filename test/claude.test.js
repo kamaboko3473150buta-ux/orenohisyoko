@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   classifyError, extractText, MODEL, generateText, generateBody,
+  buildUserContent, usageFromResponse,
 } = require('../src/main/claude');
 
 test('使うモデルはclaude-opus-5', () => {
@@ -111,4 +112,81 @@ test('generateBody: APIキーが無ければno_keyで即座に失敗する（mod
   });
   assert.strictEqual(withModel.ok, false);
   assert.strictEqual(withModel.code, 'no_key');
+});
+
+// Task 40: プロンプトキャッシュ（cachePrefix）。実際のAPIは呼ばず、
+// content配列の組み立て（buildUserContent）とusageの取り出し（usageFromResponse）を
+// 純粋関数として直接テストする。
+
+test('generateText: APIキーが無ければcachePrefix指定があってもno_keyで即座に失敗する', async () => {
+  const r = await generateText({
+    apiKey: '', system: 's', user: '参考資料はこれです\n続き', cachePrefix: '参考資料はこれです',
+  });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.code, 'no_key');
+});
+
+test('buildUserContent: cachePrefix省略時はこれまでどおり文字列のまま返す（既存呼び出し互換）', () => {
+  assert.strictEqual(buildUserContent('こんにちは', undefined), 'こんにちは');
+  assert.strictEqual(buildUserContent('こんにちは', ''), 'こんにちは');
+  assert.strictEqual(buildUserContent('こんにちは', null), 'こんにちは');
+});
+
+test('buildUserContent: cachePrefixがuser中に見つかれば、先頭に移して残りと2ブロックにする', () => {
+  const user = '前置き\n【参考資料】\nりんごとみかん\n\n続きの指示';
+  const cachePrefix = 'りんごとみかん';
+  const content = buildUserContent(user, cachePrefix);
+  assert.ok(Array.isArray(content));
+  assert.strictEqual(content.length, 2);
+  assert.strictEqual(content[0].type, 'text');
+  assert.strictEqual(content[0].text, cachePrefix);
+  assert.deepStrictEqual(content[0].cache_control, { type: 'ephemeral' });
+  // 2つ目のブロックにはキャッシュ指定を付けない（変わる内容のため）
+  assert.strictEqual(content[1].cache_control, undefined);
+});
+
+test('buildUserContent: 変わらない内容(cachePrefix)が先、変わる内容が後になる', () => {
+  const user = '前置き\n【参考資料】\n本文A\n\n続きの指示';
+  const content = buildUserContent(user, '本文A');
+  // 元の文字列からcachePrefixの部分を除いた残りが、2番目のブロックに来る
+  assert.strictEqual(content[1].text, '前置き\n【参考資料】\n\n\n続きの指示');
+  // 2つのブロックを単純結合すると、参考資料の内容自体は失われず1回だけ含まれる
+  const combined = content[0].text + content[1].text;
+  assert.strictEqual((combined.match(/本文A/g) || []).length, 1);
+});
+
+test('buildUserContent: userの中にcachePrefixが見つからなければ、これまでどおり文字列のまま返す', () => {
+  const user = 'まったく別の内容です';
+  const content = buildUserContent(user, '存在しない参考資料');
+  assert.strictEqual(content, user);
+});
+
+test('usageFromResponse: 通常のusageからinputTokens/outputTokensを取り出す', () => {
+  const res = { usage: { input_tokens: 120, output_tokens: 40 } };
+  const usage = usageFromResponse(res, 'claude-opus-5');
+  assert.strictEqual(usage.model, 'claude-opus-5');
+  assert.strictEqual(usage.inputTokens, 120);
+  assert.strictEqual(usage.outputTokens, 40);
+  assert.strictEqual(usage.cacheReadTokens, 0);
+  assert.strictEqual(usage.cacheCreationTokens, 0);
+});
+
+test('usageFromResponse: cache_read_input_tokens/cache_creation_input_tokensを取り出す', () => {
+  const res = {
+    usage: {
+      input_tokens: 10, output_tokens: 40, cache_read_input_tokens: 5000, cache_creation_input_tokens: 300,
+    },
+  };
+  const usage = usageFromResponse(res, 'claude-sonnet-5');
+  assert.strictEqual(usage.cacheReadTokens, 5000);
+  assert.strictEqual(usage.cacheCreationTokens, 300);
+});
+
+test('usageFromResponse: usageが無い・壊れたレスポンスでも例外を投げず0になる', () => {
+  const usage = usageFromResponse({}, 'claude-opus-5');
+  assert.strictEqual(usage.inputTokens, 0);
+  assert.strictEqual(usage.outputTokens, 0);
+  assert.strictEqual(usage.cacheReadTokens, 0);
+  assert.strictEqual(usage.cacheCreationTokens, 0);
+  assert.deepStrictEqual(usageFromResponse(null, 'claude-opus-5'), usageFromResponse({}, 'claude-opus-5'));
 });

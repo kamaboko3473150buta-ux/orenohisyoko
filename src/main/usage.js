@@ -20,8 +20,13 @@ function monthKey(date) {
 
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
 
+// cacheReadTokens/cacheCreationTokens（Task 40）は、Task 40より前に記録された
+// 旧データ（フラット形式・version:2どちらも）には存在しない。toEntryを必ず通すことで、
+// 無ければ0として補う（キャッシュ項目を持たない旧データの移行）。
 function emptyModelEntry() {
-  return { count: 0, inputTokens: 0, outputTokens: 0 };
+  return {
+    count: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+  };
 }
 
 function toEntry(raw) {
@@ -30,6 +35,8 @@ function toEntry(raw) {
     count: Number(e.count) || 0,
     inputTokens: Number(e.inputTokens) || 0,
     outputTokens: Number(e.outputTokens) || 0,
+    cacheReadTokens: Number(e.cacheReadTokens) || 0,
+    cacheCreationTokens: Number(e.cacheCreationTokens) || 0,
   };
 }
 
@@ -93,6 +100,8 @@ function addUsage(store, usage, when = new Date()) {
       count: prev.count + 1,
       inputTokens: prev.inputTokens + (Number(u.inputTokens) || 0),
       outputTokens: prev.outputTokens + (Number(u.outputTokens) || 0),
+      cacheReadTokens: prev.cacheReadTokens + (Number(u.cacheReadTokens) || 0),
+      cacheCreationTokens: prev.cacheCreationTokens + (Number(u.cacheCreationTokens) || 0),
     },
   };
 
@@ -140,6 +149,8 @@ function summarize(store, now = new Date()) {
         count: prev.count + entry.count,
         inputTokens: prev.inputTokens + entry.inputTokens,
         outputTokens: prev.outputTokens + entry.outputTokens,
+        cacheReadTokens: prev.cacheReadTokens + entry.cacheReadTokens,
+        cacheCreationTokens: prev.cacheCreationTokens + entry.cacheCreationTokens,
       };
     }
   }

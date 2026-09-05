@@ -57,3 +57,45 @@ test('costJpy: 未知のモデルIDはOpus 5の料金で計算される', () => 
   const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
   assert.strictEqual(costJpy('no-such-model', usage), costJpy('claude-opus-5', usage));
 });
+
+// Task 40: プロンプトキャッシュ（キャッシュ読みは入力の0.1倍、書き込みは1.25倍）
+test('costUsd: キャッシュ読みは入力の0.1倍で計算される', () => {
+  // Opus 5の入力は$5/1M。1Mトークンをキャッシュ読みすると$5 * 0.1 = $0.5
+  assert.strictEqual(
+    costUsd('claude-opus-5', { cacheReadTokens: 1_000_000 }),
+    0.5,
+  );
+});
+
+test('costUsd: キャッシュ書き込みは入力の1.25倍で計算される', () => {
+  // Opus 5の入力は$5/1M。1Mトークンをキャッシュ書き込みすると$5 * 1.25 = $6.25
+  assert.strictEqual(
+    costUsd('claude-opus-5', { cacheCreationTokens: 1_000_000 }),
+    6.25,
+  );
+});
+
+test('costUsd: 通常入力・キャッシュ読み・キャッシュ書き込み・出力をすべて合算する', () => {
+  const usage = {
+    inputTokens: 1_000_000,
+    outputTokens: 1_000_000,
+    cacheReadTokens: 1_000_000,
+    cacheCreationTokens: 1_000_000,
+  };
+  // Opus 5: 入力5 + 出力25 + 読み(5*0.1=0.5) + 書き込み(5*1.25=6.25) = 36.75
+  assert.strictEqual(costUsd('claude-opus-5', usage), 5 + 25 + 0.5 + 6.25);
+});
+
+test('costUsd: キャッシュ項目が無い（旧データ）usageでも落ちずに0扱いになる', () => {
+  assert.strictEqual(
+    costUsd('claude-opus-5', { inputTokens: 1_000_000, outputTokens: 0 }),
+    5,
+  );
+});
+
+test('costUsd: キャッシュ項目が壊れた値でも落ちずに0扱いになる', () => {
+  assert.strictEqual(
+    costUsd('claude-opus-5', { cacheReadTokens: 'abc', cacheCreationTokens: null }),
+    0,
+  );
+});

@@ -14,7 +14,40 @@ test('migrate: 旧形式（モデル別でない月別カウント）をOpus 5�
   const migrated = migrate(old);
   assert.strictEqual(migrated.version, 2);
   assert.deepStrictEqual(migrated.months['2026-09'], {
-    'claude-opus-5': { count: 3, inputTokens: 300, outputTokens: 150 },
+    'claude-opus-5': {
+      count: 3, inputTokens: 300, outputTokens: 150, cacheReadTokens: 0, cacheCreationTokens: 0,
+    },
+  });
+});
+
+// Task 40: キャッシュ項目(cacheReadTokens/cacheCreationTokens)を追加しても、
+// それより前の（Task 40前の）新形式データ（version:2だがキャッシュ項目を持たない）を壊さず、
+// 0で補って移行できること。
+test('migrate: version:2だがキャッシュ項目を持たない（Task 40より前の）データも0で補われる', () => {
+  const preTask40 = {
+    version: 2,
+    months: { '2026-09': { 'claude-sonnet-5': { count: 2, inputTokens: 200, outputTokens: 80 } } },
+  };
+  const migrated = migrate(preTask40);
+  assert.deepStrictEqual(migrated.months['2026-09']['claude-sonnet-5'], {
+    count: 2, inputTokens: 200, outputTokens: 80, cacheReadTokens: 0, cacheCreationTokens: 0,
+  });
+});
+
+test('migrate: キャッシュ項目を持つ新形式データはそのまま保たれる', () => {
+  const withCache = {
+    version: 2,
+    months: {
+      '2026-09': {
+        'claude-sonnet-5': {
+          count: 1, inputTokens: 100, outputTokens: 50, cacheReadTokens: 40, cacheCreationTokens: 20,
+        },
+      },
+    },
+  };
+  const migrated = migrate(withCache);
+  assert.deepStrictEqual(migrated.months['2026-09']['claude-sonnet-5'], {
+    count: 1, inputTokens: 100, outputTokens: 50, cacheReadTokens: 40, cacheCreationTokens: 20,
   });
 });
 
@@ -91,6 +124,35 @@ test('addUsage: 空・nullのstoreを渡しても落ちない', () => {
   assert.strictEqual(addUsage({}, {}, new Date(2026, 8, 1)).months['2026-09']['claude-opus-5'].inputTokens, 0);
 });
 
+// Task 40: キャッシュ読み・書き込みトークンの記録
+test('addUsage: cacheReadTokens/cacheCreationTokensが記録される', () => {
+  const store = addUsage({}, {
+    model: 'claude-sonnet-5', inputTokens: 100, outputTokens: 50, cacheReadTokens: 300, cacheCreationTokens: 20,
+  }, new Date(2026, 8, 4));
+  const entry = store.months['2026-09']['claude-sonnet-5'];
+  assert.strictEqual(entry.cacheReadTokens, 300);
+  assert.strictEqual(entry.cacheCreationTokens, 20);
+});
+
+test('addUsage: cacheReadTokens/cacheCreationTokens省略時は0として記録される（既存呼び出し互換）', () => {
+  const store = addUsage({}, { model: 'claude-sonnet-5', inputTokens: 100, outputTokens: 50 }, new Date(2026, 8, 4));
+  const entry = store.months['2026-09']['claude-sonnet-5'];
+  assert.strictEqual(entry.cacheReadTokens, 0);
+  assert.strictEqual(entry.cacheCreationTokens, 0);
+});
+
+test('addUsage: 同じ月・同じモデルに複数回足すとキャッシュ項目も積み上がる', () => {
+  let store = addUsage({}, {
+    model: 'claude-sonnet-5', inputTokens: 100, outputTokens: 50, cacheReadTokens: 10, cacheCreationTokens: 5,
+  }, new Date(2026, 8, 4));
+  store = addUsage(store, {
+    model: 'claude-sonnet-5', inputTokens: 20, outputTokens: 10, cacheReadTokens: 40, cacheCreationTokens: 0,
+  }, new Date(2026, 8, 10));
+  const entry = store.months['2026-09']['claude-sonnet-5'];
+  assert.strictEqual(entry.cacheReadTokens, 50);
+  assert.strictEqual(entry.cacheCreationTokens, 5);
+});
+
 test('summarizeが当月分を返し、記録が無い月でも0の器を返す', () => {
   const s = summarize({}, new Date(2026, 8, 4));
   assert.strictEqual(s.current.month, '2026-09');
@@ -149,6 +211,16 @@ test('summarizeの費用は、モデルごとの単価で計算される（同�
   assert.ok(opusSummary.current.costJpy > haikuSummary.current.costJpy);
   assert.strictEqual(opusSummary.current.costJpy, costJpy('claude-opus-5', usage));
   assert.strictEqual(haikuSummary.current.costJpy, costJpy('claude-haiku-4-5', usage));
+});
+
+test('summarizeの費用計算にキャッシュ読み・書き込みの分も反映される', () => {
+  const usage = {
+    model: 'claude-opus-5', inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000, cacheCreationTokens: 0,
+  };
+  const store = addUsage({}, usage, new Date(2026, 8, 4));
+  const s = summarize(store, new Date(2026, 8, 4));
+  assert.strictEqual(s.current.costJpy, costJpy('claude-opus-5', usage));
+  assert.ok(s.current.costJpy > 0, 'キャッシュ読みだけでも費用が計上される');
 });
 
 test('summarizeのbyModelの費用は、複数モデルが並存していても各モデルの単価で計算される', () => {

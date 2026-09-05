@@ -45,6 +45,26 @@ function sanitizeFileName(name) {
   return cleaned || '資料';
 }
 
+// Task 40: プロンプトキャッシュ。構成案・本文の2回とも同じ参考資料の塊を送っているため、
+// 2回目をキャッシュから読ませて費用を下げる。
+// prompt.js の formatSources と同じ整形ロジックをここに複製する
+// （formatSources 自体はexportされておらず、prompt.js は今回の変更対象外のため）。
+// buildOutlineUserPrompt / buildBodyUserPrompt が組み立てる文中の該当部分と
+// 文字単位で一致していないと claude.js 側でcachePrefixを見つけられないだけで、
+// その場合は自動的にこれまでどおり（キャッシュ無し）の送り方にフォールバックする
+// （claude.js の buildUserContent 参照）。安全に失敗するため例外にはしない。
+function cleanForCache(v) {
+  return String(v == null ? '' : v).trim();
+}
+
+function buildSourcesCachePrefix(sources) {
+  const list = Array.isArray(sources) ? sources : [];
+  if (!list.length) return '';
+  return list
+    .map((s) => `【参考資料: ${cleanForCache(s && s.name)}】\n${cleanForCache(s && s.text)}`)
+    .join('\n\n');
+}
+
 // プレゼン用に添付から抽出した画像の一時状態（Task 35/38）。
 // 抽出した画像は他人の資料の一部そのものなので、保存が終わったら（失敗しても）・
 // 新しい資料作成を始めるときは必ず消す。1つの資料作成フローの間だけ有効な
@@ -142,6 +162,8 @@ function register({ getSettings, getUsage, saveUsage }) {
       maxTokens: OUTLINE_MAX_TOKENS,
       // 画面で選んだモデル（その回だけの上書き）。未指定なら設定の既定（資料作成）を使う。
       model: model || settings.models.docgen,
+      // Task 40: 本文づくり（doc:body）でも同じ参考資料を送るため、キャッシュから読ませる。
+      cachePrefix: buildSourcesCachePrefix(sources),
     });
     if (!result.ok) return result; // no_key / auth / timeout などはそのまま画面に伝える
 
@@ -172,6 +194,8 @@ function register({ getSettings, getUsage, saveUsage }) {
         }),
       maxTokens: BODY_MAX_TOKENS,
       model: model || settings.models.docgen,
+      // Task 40: 構成案づくり（doc:outline）で書き込んだキャッシュを読ませる。
+      cachePrefix: buildSourcesCachePrefix(sources),
     });
     if (!result.ok) return result;
 
@@ -233,4 +257,4 @@ function cleanupOnQuit() {
   return cleanupImageSession();
 }
 
-module.exports = { register, cleanupOnQuit };
+module.exports = { register, cleanupOnQuit, buildSourcesCachePrefix };

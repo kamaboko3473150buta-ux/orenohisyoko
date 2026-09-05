@@ -39,21 +39,44 @@ const PROMPT_OVERHEAD_TOKENS = 600;
 const OUTLINE_MAX_TOKENS = 4000;
 const BODY_MAX_TOKENS = 16000;
 
+// Task 40: プロンプトキャッシュ。参考資料の塊が小さいとキャッシュ自体が効かない
+// （実際のAnthropic APIには1024〜4096トークン程度のモデルごとの最小サイズがある）ため、
+// 概算では安全側に「およそ2000トークン未満は効かない」とみなす。
+const CACHE_MIN_TOKENS = 2000;
+
 // 構成案・本文の2回のAPI呼び出し分の概算費用（円）。
-// 参考資料は2回とも丸ごと送るので、入力は毎回かかる。
-// 本文の回は、確定した構成案も一緒に送る分を足す。
+// 参考資料は2回とも丸ごと送るが、docgen/index.js が参考資料の塊を cachePrefix として
+// 渡すため、CACHE_MIN_TOKENS以上のときは2回目（本文）をキャッシュ読み（入力の0.1倍）として、
+// 1回目（構成案）をキャッシュ書き込み（入力の1.25倍）として見積もる
+// （書き込んでおかないと2回目で読めないため、正確な概算にはこれも含める）。
+// 本文の回は、確定した構成案も一緒に送る分（PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS）を足す。
 // modelIdを省略したときは資料作成の既定モデル（Sonnet 5）で見積もる。
 function estimateYen(chars, modelId = DEFAULT_DOCGEN_MODEL_ID) {
   const src = estimateTokens(chars);
   if (src <= 0) return 0;
 
+  if (src < CACHE_MIN_TOKENS) {
+    // 小さい資料はキャッシュが効かない前提（これまでどおりの計算）。
+    const outline = costJpy(modelId, {
+      inputTokens: src + PROMPT_OVERHEAD_TOKENS,
+      outputTokens: OUTLINE_OUTPUT_TOKENS,
+    });
+    const body = costJpy(modelId, {
+      inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
+      outputTokens: BODY_OUTPUT_TOKENS,
+    });
+    return outline + body;
+  }
+
   const outline = costJpy(modelId, {
-    inputTokens: src + PROMPT_OVERHEAD_TOKENS,
+    inputTokens: PROMPT_OVERHEAD_TOKENS,
     outputTokens: OUTLINE_OUTPUT_TOKENS,
+    cacheCreationTokens: src,
   });
   const body = costJpy(modelId, {
-    inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
+    inputTokens: PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
     outputTokens: BODY_OUTPUT_TOKENS,
+    cacheReadTokens: src,
   });
   return outline + body;
 }
@@ -64,6 +87,6 @@ function needsConfirm(chars) {
 
 module.exports = {
   CONFIRM_CHARS, OUTLINE_OUTPUT_TOKENS, BODY_OUTPUT_TOKENS, PROMPT_OVERHEAD_TOKENS,
-  OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS,
+  OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS, CACHE_MIN_TOKENS,
   estimateTokens, estimateYen, needsConfirm,
 };

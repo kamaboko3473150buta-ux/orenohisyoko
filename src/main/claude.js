@@ -62,11 +62,44 @@ function classifyError(err) {
   return { code: 'unknown', message: '文面の作成に失敗しました。もう一度お試しください。' };
 }
 
+// Task 40: プロンプトキャッシュ。cachePrefix（＝参考資料の塊など、繰り返し送る
+// 変わらない内容）が user 文字列の中に含まれているときだけ、そのブロックを先頭に
+// 切り出して cache_control を付け、残り（変わる内容）を後ろに置いた配列にする。
+// - cachePrefix が無い・userの中に見つからない場合は、これまでどおり user を
+//   文字列のまま返す（既存の呼び出し・挙動を絶対に壊さないため）。
+// - 見つかった場合は元のテキストからその部分を1回だけ取り除く
+//   （参考資料をキャッシュ済みブロックと本文の中に二重に送らないため）。
+function buildUserContent(user, cachePrefix) {
+  if (!cachePrefix) return user;
+  const text = String(user == null ? '' : user);
+  const idx = text.indexOf(cachePrefix);
+  if (idx === -1) return user;
+  const rest = text.slice(0, idx) + text.slice(idx + cachePrefix.length);
+  return [
+    { type: 'text', text: cachePrefix, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: rest },
+  ];
+}
+
+// レスポンスのusageから、利用状況の記録（Task 19・32・40）に使う形を取り出す。
+// SDKのレスポンス形式が変わった・usageが無い場合でも例外を投げず0にする。
+function usageFromResponse(res, model) {
+  const u = (res && res.usage) || {};
+  return {
+    model,
+    inputTokens: Number(u.input_tokens) || 0,
+    outputTokens: Number(u.output_tokens) || 0,
+    cacheReadTokens: Number(u.cache_read_input_tokens) || 0,
+    cacheCreationTokens: Number(u.cache_creation_input_tokens) || 0,
+  };
+}
+
 // テキストを生成する汎用関数。成功なら { ok:true, body, usage }、失敗なら { ok:false, code, message }。
 // メール本文（generateBody）とタスクのAI連携（Task 22）の両方がこれを呼ぶ。
 // model は省略可（省略時はこれまでどおり MODEL＝claude-opus-5）。既存の呼び出しを壊さないため。
+// cachePrefix も省略可（Task 40）。省略時はこれまでどおり content を文字列のまま送る。
 async function generateText({
-  apiKey, system, user, maxTokens, model,
+  apiKey, system, user, maxTokens, model, cachePrefix,
 }) {
   if (!apiKey) {
     return { ok: false, code: 'no_key', message: 'Claude APIキーが設定されていません。設定画面で登録してください。' };
@@ -79,7 +112,7 @@ async function generateText({
       max_tokens: maxTokens || MAX_TOKENS,
       output_config: { effort: 'low' },
       system,
-      messages: [{ role: 'user', content: user }],
+      messages: [{ role: 'user', content: buildUserContent(user, cachePrefix) }],
     });
     if (res.stop_reason === 'refusal') {
       return { ok: false, code: 'refusal', message: 'この内容では文面を作成できませんでした。書き方を変えてお試しください。' };
@@ -88,13 +121,9 @@ async function generateText({
     if (!body) {
       return { ok: false, code: 'empty', message: '文面が空で返ってきました。もう一度お試しください。' };
     }
-    // 利用状況の記録（Task 19・32）に使う。無ければ0（SDKのレスポンス形式が変わった場合の保険）。
-    // model も含める。どのモデルで使ったかが分からないと、モデル別の費用集計ができないため。
-    const usage = {
-      model: usedModel,
-      inputTokens: (res.usage && res.usage.input_tokens) || 0,
-      outputTokens: (res.usage && res.usage.output_tokens) || 0,
-    };
+    // 利用状況の記録（Task 19・32・40）に使う。model も含める。
+    // どのモデルで使ったかが分からないと、モデル別の費用集計ができないため。
+    const usage = usageFromResponse(res, usedModel);
     return { ok: true, body, usage };
   } catch (err) {
     const info = classifyError(err);
@@ -113,5 +142,5 @@ async function generateBody({
 }
 
 module.exports = {
-  MODEL, extractText, classifyError, generateText, generateBody,
+  MODEL, extractText, classifyError, generateText, generateBody, buildUserContent, usageFromResponse,
 };

@@ -7,6 +7,11 @@
 // 円換算は目安のレート（実際の為替レートとは異なる）。表示する金額はあくまで概算である。
 const USD_TO_JPY_RATE = 150;
 
+// プロンプトキャッシュ（Task 40）の単価倍率。どちらも入力単価（inputUsd）に対する倍率。
+// キャッシュ読みは入力の0.1倍、書き込みは入力の1.25倍（Anthropicの料金体系どおり）。
+const CACHE_READ_MULTIPLIER = 0.1;
+const CACHE_WRITE_MULTIPLIER = 1.25;
+
 // 料金は各モデルの実勢（1Mトークンあたりの米ドル）。
 // 実勢が変わったら、この一覧だけ直せばよい。
 const MODELS = [
@@ -42,12 +47,17 @@ function findFeature(id) {
 }
 
 // 概算費用（米ドル）。modelIdが未知でもfindModelがOpus 5に倒すので落ちない。
+// キャッシュ読み・書き込み（Task 40）はどちらも入力単価（inputUsd）に倍率をかけて計算する
+// （読みは0.1倍・書き込みは1.25倍）。usageに無い・壊れた値でも0扱いになる。
 function costUsd(modelId, usage) {
   const model = findModel(modelId);
   const u = usage || {};
   const inputCost = ((Number(u.inputTokens) || 0) / 1_000_000) * model.inputUsd;
   const outputCost = ((Number(u.outputTokens) || 0) / 1_000_000) * model.outputUsd;
-  return inputCost + outputCost;
+  const cacheReadCost = ((Number(u.cacheReadTokens) || 0) / 1_000_000) * model.inputUsd * CACHE_READ_MULTIPLIER;
+  const cacheCreationCost = ((Number(u.cacheCreationTokens) || 0) / 1_000_000)
+    * model.inputUsd * CACHE_WRITE_MULTIPLIER;
+  return inputCost + outputCost + cacheReadCost + cacheCreationCost;
 }
 
 // 概算費用（円）。あくまで目安のレートによる概算。
@@ -56,5 +66,14 @@ function costJpy(modelId, usage) {
 }
 
 module.exports = {
-  MODELS, FEATURES, DEFAULT_MODEL_ID, USD_TO_JPY_RATE, findModel, findFeature, costUsd, costJpy,
+  MODELS,
+  FEATURES,
+  DEFAULT_MODEL_ID,
+  USD_TO_JPY_RATE,
+  CACHE_READ_MULTIPLIER,
+  CACHE_WRITE_MULTIPLIER,
+  findModel,
+  findFeature,
+  costUsd,
+  costJpy,
 };

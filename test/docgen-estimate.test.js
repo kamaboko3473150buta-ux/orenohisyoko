@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CONFIRM_CHARS, estimateTokens, estimateYen, needsConfirm } = require('../src/main/docgen/estimate');
+const {
+  CONFIRM_CHARS, CACHE_MIN_TOKENS, estimateTokens, estimateYen, needsConfirm,
+} = require('../src/main/docgen/estimate');
+const { costJpy } = require('../src/main/models');
 
 test('estimateTokens: 1文字=1トークンとみなす', () => {
   assert.strictEqual(estimateTokens(100), 100);
@@ -55,4 +58,70 @@ test('estimateYen: モデルを指定すると、そのモデルの単価で計�
 
 test('estimateYen: モデル省略時は資料作成の既定（Sonnet 5）で計算される', () => {
   assert.strictEqual(estimateYen(10000), estimateYen(10000, 'claude-sonnet-5'));
+});
+
+// Task 40: プロンプトキャッシュ。参考資料が大きいとき、2回目（本文）の入力をキャッシュ読みとして
+// 概算し、キャッシュ無しより安くなることを確認する。
+test('CACHE_MIN_TOKENSはおおよそ2000トークン', () => {
+  assert.strictEqual(CACHE_MIN_TOKENS, 2000);
+});
+
+test('estimateYen: キャッシュが効く大きさの資料は、キャッシュ無しの計算より安くなる', () => {
+  const modelId = 'claude-sonnet-5';
+  const chars = 50000; // CACHE_MIN_TOKENSを大きく超える
+  const src = chars; // estimateTokensは1文字=1トークン扱い
+
+  // 旧来（キャッシュ無し）の計算を、テスト側でそのまま再現する。
+  const OUTLINE_OUTPUT_TOKENS = 1200;
+  const BODY_OUTPUT_TOKENS = 5000;
+  const PROMPT_OVERHEAD_TOKENS = 600;
+  const noCacheTotal = costJpy(modelId, {
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS,
+    outputTokens: OUTLINE_OUTPUT_TOKENS,
+  }) + costJpy(modelId, {
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
+    outputTokens: BODY_OUTPUT_TOKENS,
+  });
+
+  const withCache = estimateYen(chars, modelId);
+  assert.ok(withCache > 0);
+  assert.ok(withCache < noCacheTotal, `キャッシュ有り(${withCache})がキャッシュ無し(${noCacheTotal})より安いはず`);
+});
+
+test('estimateYen: CACHE_MIN_TOKENS未満の小さい資料はキャッシュが効かない前提で計算される（旧来と同じ）', () => {
+  const modelId = 'claude-sonnet-5';
+  const chars = CACHE_MIN_TOKENS - 1;
+  const src = chars;
+
+  const OUTLINE_OUTPUT_TOKENS = 1200;
+  const BODY_OUTPUT_TOKENS = 5000;
+  const PROMPT_OVERHEAD_TOKENS = 600;
+  const expected = costJpy(modelId, {
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS,
+    outputTokens: OUTLINE_OUTPUT_TOKENS,
+  }) + costJpy(modelId, {
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
+    outputTokens: BODY_OUTPUT_TOKENS,
+  });
+
+  assert.strictEqual(estimateYen(chars, modelId), expected);
+});
+
+test('estimateYen: ちょうどCACHE_MIN_TOKENSではキャッシュが効く計算になる（旧来より安い）', () => {
+  const modelId = 'claude-sonnet-5';
+  const chars = CACHE_MIN_TOKENS;
+  const src = chars;
+
+  const OUTLINE_OUTPUT_TOKENS = 1200;
+  const BODY_OUTPUT_TOKENS = 5000;
+  const PROMPT_OVERHEAD_TOKENS = 600;
+  const noCacheTotal = costJpy(modelId, {
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS,
+    outputTokens: OUTLINE_OUTPUT_TOKENS,
+  }) + costJpy(modelId, {
+    inputTokens: src + PROMPT_OVERHEAD_TOKENS + OUTLINE_OUTPUT_TOKENS,
+    outputTokens: BODY_OUTPUT_TOKENS,
+  });
+
+  assert.ok(estimateYen(chars, modelId) < noCacheTotal);
 });
