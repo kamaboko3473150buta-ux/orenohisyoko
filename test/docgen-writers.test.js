@@ -5,8 +5,8 @@ const path = require('node:path');
 const os = require('node:os');
 const AdmZip = require('adm-zip');
 const { Document, Packer, ImageRun, Paragraph } = require('docx');
-const { buildHtml, writePresentationPptx } = require('../src/main/docgen/writers');
-const { pptxTextFromXml } = require('../src/main/docgen/office-text');
+const { buildHtml, writeDocx, writePresentationPptx } = require('../src/main/docgen/writers');
+const { docxTextFromXml, pptxTextFromXml } = require('../src/main/docgen/office-text');
 const { extractImages, MIN_BYTES } = require('../src/main/docgen/images');
 
 // ---- 基本: 見出し・段落・箇条書きがそれぞれのタグになる ----
@@ -128,6 +128,207 @@ test('buildHtml: 日本語フォント指定が入っている', () => {
 test('buildHtml: 純粋関数（同じ入力なら同じ出力）', () => {
   const doc = { title: 'T', sections: [{ heading: 'H', paragraphs: ['P'], bullets: ['B'] }] };
   assert.strictEqual(buildHtml(doc), buildHtml(doc));
+});
+
+// ---- meta・table（Task 41: 種類ごとの雛形） ----
+
+test('buildHtml: metaがラベル・値の表になる', () => {
+  const html = buildHtml({
+    title: '第12回 定例会議 議事録',
+    meta: [
+      { label: '日時', value: '2026年9月3日(水) 14:00〜15:00' },
+      { label: '場所', value: '第2会議室' },
+    ],
+    sections: [],
+  });
+  assert.ok(html.includes('日時'));
+  assert.ok(html.includes('2026年9月3日(水) 14:00〜15:00'));
+  assert.ok(html.includes('場所'));
+  assert.ok(html.includes('第2会議室'));
+  assert.ok(html.includes('<table'), 'metaがtableタグになる');
+});
+
+test('buildHtml: metaが無ければmetaのtableを出さない', () => {
+  const html = buildHtml({ title: 'T', sections: [] });
+  assert.ok(!html.includes('<table'));
+});
+
+test('buildHtml: metaの特殊文字がエスケープされる', () => {
+  const html = buildHtml({
+    title: 'T',
+    meta: [{ label: '<b>日時</b>', value: 'A & B' }],
+    sections: [],
+  });
+  assert.ok(!html.includes('<b>日時</b>'));
+  assert.ok(html.includes('&lt;b&gt;日時&lt;/b&gt;'));
+  assert.ok(html.includes('A &amp; B'));
+});
+
+test('buildHtml: セクションのtableがheaders/rowsの表になる', () => {
+  const html = buildHtml({
+    title: 'T',
+    sections: [{
+      heading: '宿題',
+      paragraphs: [],
+      bullets: [],
+      table: { headers: ['項目', '担当', '期限'], rows: [['議事録配布', '田中', '9/10']] },
+    }],
+  });
+  assert.ok(html.includes('項目'));
+  assert.ok(html.includes('担当'));
+  assert.ok(html.includes('期限'));
+  assert.ok(html.includes('議事録配布'));
+  assert.ok(html.includes('田中'));
+  assert.ok(html.includes('9/10'));
+});
+
+test('buildHtml: tableの特殊文字がエスケープされる', () => {
+  const html = buildHtml({
+    title: 'T',
+    sections: [{
+      heading: 'H',
+      table: { headers: ['<script>'], rows: [['A & B']] },
+    }],
+  });
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(html.includes('A &amp; B'));
+});
+
+test('buildHtml: tableが無いセクションはtableタグを出さない', () => {
+  const html = buildHtml({ title: 'T', sections: [{ heading: 'H', paragraphs: ['p'], bullets: [] }] });
+  assert.ok(!html.includes('<table'));
+});
+
+test('buildHtml: tableの列数が合わない行は捨てて描く（headersと行の長さが揃う）', () => {
+  const html = buildHtml({
+    title: 'T',
+    sections: [{
+      heading: 'H',
+      table: { headers: ['A', 'B'], rows: [['a1', 'b1'], ['壊れた行のみ']] },
+    }],
+  });
+  assert.ok(html.includes('a1'));
+  assert.ok(html.includes('b1'));
+  assert.ok(!html.includes('壊れた行のみ'), '列数が合わない行は出さない');
+});
+
+test('buildHtml: meta・tableが型違い（文字列・null等）でも落ちない', () => {
+  assert.doesNotThrow(() => buildHtml({ title: 'T', meta: 'not-an-array', sections: [] }));
+  assert.doesNotThrow(() => buildHtml({
+    title: 'T',
+    sections: [{ heading: 'H', table: 'not-an-object' }],
+  }));
+  assert.doesNotThrow(() => buildHtml({
+    title: 'T',
+    sections: [{ heading: 'H', table: { headers: [], rows: [] } }],
+  }));
+});
+
+// ---- writeDocx: 実際に.docxとして書き出し、office-text.jsで読み返す ----
+
+test('writeDocx: metaと表を含む資料を書き出し、読み返して中身が入っていることを確認する', async () => {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-docx-verify-'));
+  try {
+    const outPath = path.join(workDir, 'verify.docx');
+    const doc = {
+      title: '第12回 定例会議 議事録',
+      meta: [
+        { label: '日時', value: '2026年9月3日(水) 14:00〜15:00' },
+        { label: '場所', value: '第2会議室' },
+        { label: '出席者', value: '田中・佐藤・鈴木' },
+      ],
+      sections: [
+        {
+          heading: '決定事項',
+          paragraphs: ['A案で進めることになった。'],
+          bullets: [],
+        },
+        {
+          heading: '宿題',
+          paragraphs: [],
+          bullets: [],
+          table: {
+            headers: ['項目', '担当', '期限'],
+            rows: [
+              ['議事録の配布', '田中', '9/10'],
+              ['資料の作成', '鈴木', '9/12'],
+            ],
+          },
+        },
+      ],
+    };
+
+    await writeDocx(doc, outPath);
+
+    const zip = new AdmZip(outPath);
+    const xml = zip.readAsText('word/document.xml');
+    const text = docxTextFromXml(xml);
+
+    assert.match(text, /第12回 定例会議 議事録/);
+    assert.match(text, /日時/);
+    assert.match(text, /2026年9月3日\(水\) 14:00〜15:00/);
+    assert.match(text, /場所/);
+    assert.match(text, /第2会議室/);
+    assert.match(text, /出席者/);
+    assert.match(text, /田中・佐藤・鈴木/);
+    assert.match(text, /決定事項/);
+    assert.match(text, /A案で進めることになった。/);
+    assert.match(text, /宿題/);
+    assert.match(text, /項目/);
+    assert.match(text, /担当/);
+    assert.match(text, /期限/);
+    assert.match(text, /議事録の配布/);
+    assert.match(text, /田中/);
+    assert.match(text, /9\/10/);
+    assert.match(text, /資料の作成/);
+    assert.match(text, /鈴木/);
+    assert.match(text, /9\/12/);
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writeDocx: metaもtableも無い資料（既存呼び出し）でもこれまで通り書き出せる', async () => {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-docx-legacy-'));
+  try {
+    const outPath = path.join(workDir, 'legacy.docx');
+    const doc = {
+      title: 'これまで通りの資料',
+      sections: [{ heading: '見出し', paragraphs: ['段落'], bullets: ['箇条書き'] }],
+    };
+    await assert.doesNotReject(writeDocx(doc, outPath));
+    const zip = new AdmZip(outPath);
+    const text = docxTextFromXml(zip.readAsText('word/document.xml'));
+    assert.match(text, /これまで通りの資料/);
+    assert.match(text, /見出し/);
+    assert.match(text, /段落/);
+    assert.match(text, /箇条書き/);
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writeDocx: meta・sectionsが想定外の型（文字列・null等）でも例外を投げない', async () => {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-docx-broken-'));
+  try {
+    const cases = [
+      { title: 'T', meta: 'not-an-array', sections: [] },
+      { title: 'T', sections: [{ heading: 'H', table: 'not-an-object' }] },
+      { title: 'T', sections: [{ heading: 'H', table: { headers: ['A'], rows: 'not-an-array' } }] },
+      null,
+      undefined,
+      {},
+    ];
+    let n = 0;
+    for (const doc of cases) {
+      n += 1;
+      const outPath = path.join(workDir, `broken-${n}.docx`);
+      await assert.doesNotReject(writeDocx(doc, outPath), `case ${n}`);
+    }
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
 });
 
 // ---- writePresentationPptx（Task 37: プレゼン専用のレイアウト付き書き出し） ----

@@ -11,7 +11,9 @@ const { accessSync, constants: fsConstants } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { Document, Packer, Paragraph, HeadingLevel } = require('docx');
+const {
+  Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType,
+} = require('docx');
 const PptxGenJS = require('pptxgenjs');
 
 // 日本語（游ゴシック）が文字化けしないよう明示するフォント。
@@ -42,10 +44,55 @@ function sanitizeStringArray(v) {
     .filter((x) => x.length > 0);
 }
 
-// doc（想定外の形も含む）から、出力に使える形のセクション一覧を作る。
-// heading・paragraphs・bullets が全部空になるセクションは、出す意味が無いので捨てる。
+// 表のセル1個分を文字列にする。文字列はそのまま、数値は文字列化して残す。
+// それ以外の型は空文字にする（docgen/prompt.js の sanitizeTableCell と同じ考え方の複製。
+// writers.js はAIの応答解析を担う prompt.js に依存させたくないため、ここでも複製する
+// ——画面で編集された後のdocがそのまま来ることもあり、prompt.jsの正規化を必ず通るとは
+// 限らないため）。
+function sanitizeTableCell(v) {
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return '';
+}
+
+// { headers, rows } を正規化する。headersが1列も無い・rowsが配列でない・行が配列でない
+// ・列数がheadersと合わない行は捨てる。有効な行が1つも残らなければ表を出す意味が無いので
+// nullにする（docgen/prompt.js の sanitizeTable と同じ考え方の複製）。
+function normalizeTable(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const headers = sanitizeStringArray(v.headers);
+  if (!headers.length) return null;
+  const rawRows = Array.isArray(v.rows) ? v.rows : [];
+  const rows = [];
+  for (const row of rawRows) {
+    if (!Array.isArray(row) || row.length !== headers.length) continue;
+    rows.push(row.map(sanitizeTableCell));
+  }
+  if (!rows.length) return null;
+  return { headers, rows };
+}
+
+// meta（{label, value}の一覧）を正規化する。配列でなければ空配列にし、要素がオブジェクト
+// でない・labelもvalueも空になる要素は捨てる（docgen/prompt.js の sanitizeMeta と同じ
+// 考え方の複製）。
+function normalizeMetaItem(m) {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+  const label = sanitizeString(m.label);
+  const value = sanitizeString(m.value);
+  if (!label && !value) return null;
+  return { label, value };
+}
+
+function normalizeMeta(v) {
+  if (!Array.isArray(v)) return [];
+  return v.map(normalizeMetaItem).filter((m) => m !== null);
+}
+
+// doc（想定外の形も含む）から、出力に使える形のmeta・セクション一覧を作る。
+// heading・paragraphs・bullets・table が全部空になるセクションは、出す意味が無いので捨てる。
 function normalizeDoc(doc) {
   const title = sanitizeString(doc && doc.title);
+  const meta = normalizeMeta(doc && doc.meta);
   const rawSections = Array.isArray(doc && doc.sections) ? doc.sections : [];
   const sections = [];
   for (const s of rawSections) {
@@ -53,20 +100,46 @@ function normalizeDoc(doc) {
     const heading = sanitizeString(s.heading);
     const paragraphs = sanitizeStringArray(s.paragraphs);
     const bullets = sanitizeStringArray(s.bullets);
-    if (!heading && !paragraphs.length && !bullets.length) continue;
-    sections.push({ heading, paragraphs, bullets });
+    const table = normalizeTable(s.table);
+    if (!heading && !paragraphs.length && !bullets.length && !table) continue;
+    sections.push({
+      heading, paragraphs, bullets, table,
+    });
   }
-  return { title, sections };
+  return { title, meta, sections };
+}
+
+// metaを「ラベル・値」の2列の表にするHTMLを組み立てる。metaが空なら空文字を返す。
+function buildMetaHtml(meta) {
+  if (!meta.length) return '';
+  const rows = meta
+    .map((m) => `<tr><th>${escapeHtml(m.label)}</th><td>${escapeHtml(m.value)}</td></tr>`)
+    .join('\n');
+  return `<table class="meta">\n${rows}\n</table>`;
+}
+
+// セクションのtable（{headers, rows}）を罫線付きの表にするHTMLを組み立てる。
+// tableが無ければ空文字を返す。
+function buildTableHtml(table) {
+  if (!table) return '';
+  const thead = `<tr>${table.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+  const tbody = table.rows
+    .map((row) => `<tr>${row.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`)
+    .join('\n');
+  return `<table class="data">\n<thead>\n${thead}\n</thead>\n<tbody>\n${tbody}\n</tbody>\n</table>`;
 }
 
 // PDF化のためのHTMLを組み立てる純粋関数。
 // 生成された本文がそのまま入るため、HTML特殊文字は必ずエスケープする。
 // 日本語が豆腐（□）にならないよう、日本語フォントを明示する。
 function buildHtml(doc) {
-  const { title, sections } = normalizeDoc(doc);
+  const { title, meta, sections } = normalizeDoc(doc);
 
   const body = [];
   if (title) body.push(`<h1>${escapeHtml(title)}</h1>`);
+
+  const metaHtml = buildMetaHtml(meta);
+  if (metaHtml) body.push(metaHtml);
 
   for (const section of sections) {
     if (section.heading) body.push(`<h2>${escapeHtml(section.heading)}</h2>`);
@@ -77,6 +150,8 @@ function buildHtml(doc) {
       const items = section.bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join('\n');
       body.push(`<ul>\n${items}\n</ul>`);
     }
+    const tableHtml = buildTableHtml(section.table);
+    if (tableHtml) body.push(tableHtml);
   }
 
   const pageTitle = escapeHtml(title || '資料');
@@ -99,6 +174,12 @@ function buildHtml(doc) {
   p { margin: 8px 0; white-space: pre-wrap; }
   ul { margin: 8px 0; padding-left: 24px; }
   li { margin: 4px 0; }
+  table { border-collapse: collapse; margin: 8px 0 16px; }
+  table.meta th, table.meta td, table.data th, table.data td {
+    border: 1px solid #999; padding: 6px 10px; text-align: left; vertical-align: top;
+  }
+  table.meta th { background: #f2f2f2; white-space: nowrap; }
+  table.data th { background: #f2f2f2; }
 </style>
 </head>
 <body>
@@ -107,13 +188,54 @@ ${body.join('\n')}
 </html>`;
 }
 
+// Word用のTableセルを1個作る。見出しセルは太字にし、薄い網掛けを付ける。
+function buildDocxCell(text, { header = false, widthPercent } = {}) {
+  const run = header ? new TextRun({ text, bold: true }) : new TextRun({ text });
+  return new TableCell({
+    width: widthPercent ? { size: widthPercent, type: WidthType.PERCENTAGE } : undefined,
+    shading: header ? { fill: 'F2F2F2' } : undefined,
+    children: [new Paragraph({ children: [run] })],
+  });
+}
+
+// metaを「ラベル・値」の2列の表にする。metaが空ならnullを返す。
+function buildDocxMetaTable(meta) {
+  if (!meta.length) return null;
+  const rows = meta.map((m) => new TableRow({
+    children: [
+      buildDocxCell(m.label, { header: true, widthPercent: 25 }),
+      buildDocxCell(m.value, { widthPercent: 75 }),
+    ],
+  }));
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows });
+}
+
+// セクションのtable（{headers, rows}）を罫線付きの表にする。tableが無ければnullを返す。
+function buildDocxSectionTable(table) {
+  if (!table) return null;
+  const headerRow = new TableRow({
+    children: table.headers.map((h) => buildDocxCell(h, { header: true })),
+  });
+  const bodyRows = table.rows.map((row) => new TableRow({
+    children: row.map((cell) => buildDocxCell(cell)),
+  }));
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...bodyRows] });
+}
+
 // Word用の段落一覧を組み立てる。タイトル→見出し1、セクション見出し→見出し2。
+// meta はタイトル直後に2列の表として置き、セクションのtableは段落・箇条書きのあとに置く。
 function buildDocxChildren(doc) {
-  const { title, sections } = normalizeDoc(doc);
+  const { title, meta, sections } = normalizeDoc(doc);
   const children = [];
 
   if (title) {
     children.push(new Paragraph({ text: title, heading: HeadingLevel.HEADING_1 }));
+  }
+
+  const metaTable = buildDocxMetaTable(meta);
+  if (metaTable) {
+    children.push(metaTable);
+    children.push(new Paragraph({ text: '' }));
   }
 
   for (const section of sections) {
@@ -125,6 +247,11 @@ function buildDocxChildren(doc) {
     }
     for (const b of section.bullets) {
       children.push(new Paragraph({ text: b, bullet: { level: 0 } }));
+    }
+    const sectionTable = buildDocxSectionTable(section.table);
+    if (sectionTable) {
+      children.push(sectionTable);
+      children.push(new Paragraph({ text: '' }));
     }
   }
 
