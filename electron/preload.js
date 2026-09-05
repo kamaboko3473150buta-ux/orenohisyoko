@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('hishoko', {
   docTypes: () => ipcRenderer.invoke('doc:types'),
   docPickFiles: () => ipcRenderer.invoke('doc:pickFiles'),
   docReadFiles: (args) => ipcRenderer.invoke('doc:readFiles', args),
+  // 資料作成を新しく始めるときに呼ぶ。前回抽出した画像の一時フォルダを片付ける。
+  docResetImages: () => ipcRenderer.invoke('doc:resetImages'),
   docOutline: (args) => ipcRenderer.invoke('doc:outline', args),
   docBody: (args) => ipcRenderer.invoke('doc:body', args),
   docSave: (args) => ipcRenderer.invoke('doc:save', args),

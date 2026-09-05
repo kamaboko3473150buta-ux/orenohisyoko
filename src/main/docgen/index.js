@@ -3,17 +3,25 @@
 // 同じ形で、「保存する」「ファイル選択ダイアログを出す」「Claudeを呼ぶ」という副作用だけを担い、
 // 中身のロジック（読み取り・プロンプト組み立て・書き出し）はdocgen配下の他ファイルに任せる。
 
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const { ipcMain, dialog, BrowserWindow } = require('electron');
 const { DOC_TYPES } = require('./types');
 const { readFiles } = require('./readers');
+const { extractImages, MAX_IMAGES } = require('./images');
 const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
+  buildSlideOutlineSystemPrompt, buildSlideOutlineUserPrompt,
+  buildSlideBodySystemPrompt, buildSlideBodyUserPrompt, parseDeckJson,
 } = require('./prompt');
 const {
   OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS, estimateYen, needsConfirm,
 } = require('./estimate');
-const { writeDocx, writePdf, writePptx } = require('./writers');
+const {
+  writeDocx, writePdf, writePptx, writePresentationPptx,
+} = require('./writers');
 const { generateText } = require('../claude');
 const { addUsage } = require('../usage');
 
@@ -35,6 +43,27 @@ function todayYmd(now = new Date()) {
 function sanitizeFileName(name) {
   const cleaned = String(name || '').replace(/[\\/:*?"<>|]/g, '').trim();
   return cleaned || '資料';
+}
+
+// プレゼン用に添付から抽出した画像の一時状態（Task 35/38）。
+// 抽出した画像は他人の資料の一部そのものなので、保存が終わったら（失敗しても）・
+// 新しい資料作成を始めるときは必ず消す。1つの資料作成フローの間だけ有効な
+// モジュール内の状態として持つ（このアプリはウィンドウ1枚・1ユーザー前提のため、
+// セッション管理の仕組みを別途作るのはYAGNI）。
+let imageSession = { images: [], dirs: [] };
+
+// 抽出済みの画像と、それを保存した一時フォルダをすべて消す。
+// 一時フォルダが1つも無い（何も抽出していない）場合も含め、例外は投げない。
+async function cleanupImageSession() {
+  const { dirs } = imageSession;
+  imageSession = { images: [], dirs: [] };
+  await Promise.all(dirs.map(async (dir) => {
+    try {
+      await fs.rm(dir, { recursive: true, force: true });
+    } catch (err) {
+      // 消せなくても資料作成自体には影響させない
+    }
+  }));
 }
 
 function register({ getSettings, getUsage, saveUsage }) {
@@ -63,22 +92,50 @@ function register({ getSettings, getUsage, saveUsage }) {
     needsConfirm: needsConfirm(chars),
   }));
 
-  ipcMain.handle('doc:readFiles', async (_e, { filePaths } = {}) => {
-    const results = await readFiles(filePaths);
-    return { results };
+  // 新しい資料作成を始めるときに呼ぶ。前回抽出した画像と一時フォルダを消してからゼロに戻す
+  // （資料作成画面を開くたびに画面側が呼ぶ。他人の資料の画像をいつまでも残さないため）。
+  ipcMain.handle('doc:resetImages', async () => {
+    await cleanupImageSession();
+    return { ok: true };
   });
 
-  // 構成案を作る（1回目のAPI呼び出し）
+  ipcMain.handle('doc:readFiles', async (_e, { filePaths } = {}) => {
+    const results = await readFiles(filePaths);
+
+    // 添付からプレゼン用の画像を抽出する（Task 35/38）。読み取り自体は種類を問わず
+    // 毎回行うが、実際に使うのはプレゼン資料のときだけ。1回のdoc:readFiles呼び出しごとに
+    // 専用の一時フォルダを1つ作り、そのフォルダをセッションに積み増していく
+    // （画面は複数回に分けて添付を追加できるため、既に抽出済みの分は残したまま追加する）。
+    try {
+      const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hishoko-docgen-img-'));
+      const extracted = await extractImages(filePaths, outDir);
+      if (extracted.length) {
+        imageSession.images = imageSession.images.concat(extracted).slice(0, MAX_IMAGES);
+        imageSession.dirs.push(outDir);
+      } else {
+        // 画像が1枚も無ければ、作っただけの空フォルダを残さず消す
+        await fs.rmdir(outDir).catch(() => {});
+      }
+    } catch (err) {
+      // 画像抽出に失敗しても、添付の読み取り自体（results）は返す
+    }
+
+    return { results, imageCount: imageSession.images.length };
+  });
+
+  // 構成案を作る（1回目のAPI呼び出し）。プレゼン資料だけは専用のプロンプト・解析を使う
+  // （レポート等の {title, sections} とは別の deck 形式 {title, subtitle, slides} のため）。
   ipcMain.handle('doc:outline', async (_e, {
     typeId, brief, sources, model,
   } = {}) => {
+    const isSlide = typeId === 'presentation';
     const settings = getSettings();
     const result = await generateText({
       apiKey: settings.apiKey,
-      system: buildOutlineSystemPrompt(typeId),
-      user: buildOutlineUserPrompt({
-        typeId, brief, sources, today: todayYmd(),
-      }),
+      system: isSlide ? buildSlideOutlineSystemPrompt() : buildOutlineSystemPrompt(typeId),
+      user: isSlide
+        ? buildSlideOutlineUserPrompt({ brief, sources, imageCount: imageSession.images.length, today: todayYmd() })
+        : buildOutlineUserPrompt({ typeId, brief, sources, today: todayYmd() }),
       maxTokens: OUTLINE_MAX_TOKENS,
       // 画面で選んだモデル（その回だけの上書き）。未指定なら設定の既定（資料作成）を使う。
       model: model || settings.models.docgen,
@@ -86,6 +143,10 @@ function register({ getSettings, getUsage, saveUsage }) {
     if (!result.ok) return result; // no_key / auth / timeout などはそのまま画面に伝える
 
     saveUsage(addUsage(getUsage(), result.usage, new Date().toISOString()));
+    if (isSlide) {
+      const { deck, failed } = parseDeckJson(result.body);
+      return { ok: true, outline: deck, failed };
+    }
     const { outline, failed } = parseOutlineJson(result.body);
     return { ok: true, outline, failed };
   });
@@ -94,19 +155,28 @@ function register({ getSettings, getUsage, saveUsage }) {
   ipcMain.handle('doc:body', async (_e, {
     typeId, brief, sources, outline, model,
   } = {}) => {
+    const isSlide = typeId === 'presentation';
     const settings = getSettings();
     const result = await generateText({
       apiKey: settings.apiKey,
-      system: buildBodySystemPrompt(typeId),
-      user: buildBodyUserPrompt({
-        typeId, brief, sources, outline, today: todayYmd(),
-      }),
+      system: isSlide ? buildSlideBodySystemPrompt() : buildBodySystemPrompt(typeId),
+      user: isSlide
+        ? buildSlideBodyUserPrompt({
+          brief, sources, outline, imageCount: imageSession.images.length,
+        })
+        : buildBodyUserPrompt({
+          typeId, brief, sources, outline, today: todayYmd(),
+        }),
       maxTokens: BODY_MAX_TOKENS,
       model: model || settings.models.docgen,
     });
     if (!result.ok) return result;
 
     saveUsage(addUsage(getUsage(), result.usage, new Date().toISOString()));
+    if (isSlide) {
+      const { deck, failed } = parseDeckJson(result.body);
+      return { ok: true, doc: deck, failed };
+    }
     const { doc, failed } = parseBodyJson(result.body);
     return { ok: true, doc, failed };
   });
@@ -129,7 +199,13 @@ function register({ getSettings, getUsage, saveUsage }) {
       if (format === 'pdf') {
         await writePdf(doc, filePath, BrowserWindow);
       } else if (format === 'pptx') {
-        await writePptx(doc, filePath);
+        // deck形式（{ slides:[...] }）ならプレゼン専用の書き出しに、
+        // それ以外（レポート等をPowerPoint形式で保存したい場合）は従来のwritePptxに渡す。
+        if (doc && Array.isArray(doc.slides)) {
+          await writePresentationPptx(doc, imageSession.images, filePath);
+        } else {
+          await writePptx(doc, filePath);
+        }
       } else {
         await writeDocx(doc, filePath);
       }
@@ -140,8 +216,18 @@ function register({ getSettings, getUsage, saveUsage }) {
         code: 'write_failed',
         message: `保存に失敗しました（${(err && err.message) || err}）`,
       };
+    } finally {
+      // 保存が終わったら（失敗しても）、抽出しておいた画像と一時フォルダを必ず消す。
+      // 他人の資料から取り出した画像をいつまでも残さないため。
+      await cleanupImageSession();
     }
   });
 }
 
-module.exports = { register };
+// アプリ終了時の保険。保存せずに資料作成画面から離れた・アプリごと閉じた場合でも、
+// 抽出済みの画像の一時フォルダを残さないため呼び出し元（main.js）から使う。
+function cleanupOnQuit() {
+  return cleanupImageSession();
+}
+
+module.exports = { register, cleanupOnQuit };

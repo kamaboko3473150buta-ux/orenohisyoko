@@ -7,6 +7,37 @@
 // 置かず、この画面を開いている間だけの変数（state）に持つ。
 window.Views = window.Views || {};
 
+// プレゼン資料（deck形式）のレイアウト名を、画面に出す日本語ラベルにする。
+const SLIDE_LAYOUT_LABELS = {
+  title: '表紙',
+  statement: '主張',
+  bullets: '箇条書き',
+  compare: '比較',
+  image: '画像',
+  closing: 'まとめ',
+};
+
+function slideLayoutLabel(layout) {
+  return SLIDE_LAYOUT_LABELS[layout] || layout || '（不明）';
+}
+
+// 構成案の段階（まだbulletsの中身が無いこともある）のスライド1枚を、
+// 読み取り用の短いテキストにする。
+function summarizeSlideContent(slide) {
+  if (slide.layout === 'compare') {
+    const left = slide.left || {};
+    const right = slide.right || {};
+    const leftText = [left.heading, ...(left.bullets || [])].filter(Boolean).join(' / ');
+    const rightText = [right.heading, ...(right.bullets || [])].filter(Boolean).join(' / ');
+    return [leftText, rightText].filter(Boolean).join('\n') || '（内容なし）';
+  }
+  if (Array.isArray(slide.bullets) && slide.bullets.length) {
+    return slide.bullets.map((b) => `・${b}`).join('\n');
+  }
+  if (slide.lead) return slide.lead;
+  return '（内容なし）';
+}
+
 Views.docgen = {
   async render(root) {
     App.setTitle('資料作成');
@@ -14,6 +45,9 @@ Views.docgen = {
     const settings = await window.hishoko.getSettings();
     const modelMeta = await window.hishoko.modelsList();
     const { types } = await window.hishoko.docTypes();
+    // この画面を開くたびに「新しい資料作成」として、前回抽出した画像の
+    // 一時フォルダを片付けてもらう（他人の資料の画像を残さないため）。
+    await window.hishoko.docResetImages();
 
     function findType(id) {
       return types.find((t) => t.id === id) || types[0];
@@ -23,10 +57,15 @@ Views.docgen = {
       typeId: types[0] ? types[0].id : 'report',
       brief: '',
       attachments: [], // { ok, name, chars, error, text }
-      outline: null, // { title, sections: [{ heading, points }] }
-      doc: null, // { title, sections: [{ heading, paragraphs, bullets }] }
+      imageCount: 0, // 添付から抽出できた画像の枚数（プレゼン資料でのみ使う）
+      outline: null, // 通常: { title, sections: [{ heading, points }] } / プレゼン: deck
+      doc: null, // 通常: { title, sections: [{ heading, paragraphs, bullets }] } / プレゼン: deck
     };
     state.format = findType(state.typeId).defaultFormat;
+
+    function isSlideType() {
+      return state.typeId === 'presentation';
+    }
 
     function totalChars() {
       return state.attachments
@@ -77,6 +116,17 @@ Views.docgen = {
       const pickBtn = App.h('button', { class: 'secondary', text: 'ファイルを選ぶ' });
       const attachList = App.h('div', { class: 'attach-list' });
       const summaryEl = App.h('div', { class: 'status' });
+      const imageInfoEl = App.h('div', { class: 'status' });
+
+      // プレゼン資料のときだけ、添付から使える画像の枚数を伝える。
+      function renderImageInfo() {
+        if (isSlideType() && state.imageCount > 0) {
+          imageInfoEl.textContent = `画像 ${state.imageCount}枚を利用できます。`;
+          imageInfoEl.hidden = false;
+        } else {
+          imageInfoEl.hidden = true;
+        }
+      }
 
       function renderAttachList() {
         while (attachList.firstChild) attachList.removeChild(attachList.firstChild);
@@ -113,15 +163,18 @@ Views.docgen = {
         if (!filePaths || !filePaths.length) return; // キャンセルなら何もしない
         pickBtn.disabled = true;
         pickBtn.textContent = '読み取り中…';
-        const { results } = await window.hishoko.docReadFiles({ filePaths });
+        const { results, imageCount } = await window.hishoko.docReadFiles({ filePaths });
         pickBtn.disabled = false;
         pickBtn.textContent = 'ファイルを選ぶ';
         state.attachments = state.attachments.concat(results);
+        state.imageCount = imageCount || 0;
         renderAttachList();
         renderSummary();
+        renderImageInfo();
       });
 
-      // 出力形式。
+      // 出力形式。プレゼン資料はレイアウトを描くPowerPoint専用なので選ばせない
+      // （Word/PDFにしても意味のある見た目にならないため）。
       function buildFormatRadio(value, label) {
         const id = `docFormat_${value}`;
         const input = App.h('input', { type: 'radio', name: 'docFormat', id });
@@ -131,11 +184,13 @@ Views.docgen = {
         });
         return App.h('span', {}, [input, App.h('label', { for: id, text: label })]);
       }
-      const formatRow = App.h('div', { class: 'radio-row' }, [
-        buildFormatRadio('docx', 'Word'),
-        buildFormatRadio('pptx', 'PowerPoint'),
-        buildFormatRadio('pdf', 'PDF'),
-      ]);
+      const formatField = isSlideType()
+        ? App.h('div', { class: 'status', text: '出力形式: PowerPoint（プレゼン資料は自動でPowerPoint形式になります）' })
+        : App.h('div', { class: 'radio-row' }, [
+          buildFormatRadio('docx', 'Word'),
+          buildFormatRadio('pptx', 'PowerPoint'),
+          buildFormatRadio('pdf', 'PDF'),
+        ]);
 
       const modelSelect = buildModelSelect();
       modelSelect.addEventListener('change', renderSummary);
@@ -185,11 +240,16 @@ Views.docgen = {
         } else {
           Hishoko.say('smile', '構成案ができました。内容を確認してください');
         }
-        renderOutlineScreen();
+        if (isSlideType()) {
+          renderSlideOutlineScreen();
+        } else {
+          renderOutlineScreen();
+        }
       });
 
       renderAttachList();
       renderSummary();
+      renderImageInfo();
 
       showScreen(App.h('div', {}, [
         App.h('div', { class: 'card' }, [
@@ -206,10 +266,11 @@ Views.docgen = {
             App.h('div', { class: 'actions' }, [pickBtn]),
             attachList,
             summaryEl,
+            imageInfoEl,
           ]),
           App.h('div', { class: 'field' }, [
             App.h('label', { text: '(4) 出力形式' }),
-            formatRow,
+            formatField,
           ]),
           errorEl,
           App.h('div', { class: 'actions' }, [
@@ -436,6 +497,279 @@ Views.docgen = {
             App.h('label', { text: '出力形式' }),
             formatSelect,
           ]),
+          errorEl,
+          App.h('div', { class: 'actions' }, [backBtn, saveBtn]),
+        ]),
+      ]));
+    }
+
+    // --- (2') プレゼン: スライド構成案の確認・編集画面 ---
+    // レポート等の renderOutlineScreen とは別物（deck形式 { title, subtitle, slides }）。
+    // この段階ではAIにbullets/noteの中身を書かせていない（レイアウト・見出しだけ決める）ので、
+    // 表示はレイアウト名・見出し・（あれば）中身の要約にとどめ、編集は見出しと並べ替え・削除にする。
+    function renderSlideOutlineScreen() {
+      const deck = state.outline;
+
+      const titleInput = App.h('input', { type: 'text', value: deck.title || '' });
+      titleInput.addEventListener('input', () => { deck.title = titleInput.value; });
+
+      const subtitleInput = App.h('input', { type: 'text', value: deck.subtitle || '' });
+      subtitleInput.addEventListener('input', () => { deck.subtitle = subtitleInput.value; });
+
+      const slidesHost = App.h('div', { class: 'outline-sections' });
+
+      function renderSlides() {
+        while (slidesHost.firstChild) slidesHost.removeChild(slidesHost.firstChild);
+        deck.slides.forEach((s, idx) => {
+          const layoutBadge = App.h('span', { class: 'attach-chars', text: slideLayoutLabel(s.layout) });
+          const headingInput = App.h('input', { type: 'text', value: s.heading || '' });
+          headingInput.addEventListener('input', () => { s.heading = headingInput.value; });
+
+          const contentEl = App.h('div', {
+            class: 'status outline-points',
+            text: summarizeSlideContent(s),
+          });
+
+          const upBtn = App.h('button', { class: 'ghost', text: '↑', disabled: idx === 0 });
+          const downBtn = App.h('button', {
+            class: 'ghost', text: '↓', disabled: idx === deck.slides.length - 1,
+          });
+          const removeBtn = App.h('button', { class: 'ghost', text: '削除' });
+
+          upBtn.addEventListener('click', () => {
+            if (idx === 0) return;
+            const tmp = deck.slides[idx - 1];
+            deck.slides[idx - 1] = deck.slides[idx];
+            deck.slides[idx] = tmp;
+            renderSlides();
+          });
+          downBtn.addEventListener('click', () => {
+            if (idx === deck.slides.length - 1) return;
+            const tmp = deck.slides[idx + 1];
+            deck.slides[idx + 1] = deck.slides[idx];
+            deck.slides[idx] = tmp;
+            renderSlides();
+          });
+          removeBtn.addEventListener('click', () => {
+            deck.slides.splice(idx, 1);
+            renderSlides();
+          });
+
+          slidesHost.appendChild(App.h('div', { class: 'outline-section' }, [
+            App.h('div', { class: 'outline-section-row' }, [layoutBadge, headingInput, upBtn, downBtn, removeBtn]),
+            contentEl,
+          ]));
+        });
+        if (!deck.slides.length) {
+          slidesHost.appendChild(App.h('div', { class: 'status', text: 'スライドがありません。' }));
+        }
+      }
+      renderSlides();
+
+      const backBtn = App.h('button', { class: 'secondary', text: 'やり直す' });
+      backBtn.addEventListener('click', () => renderInputScreen());
+
+      const bodyModelSelect = buildModelSelect();
+      const bodyBtn = App.h('button', { text: 'この構成で本文を作る' });
+      const errorEl = App.h('div', { class: 'error', hidden: true });
+
+      bodyBtn.addEventListener('click', async () => {
+        errorEl.hidden = true;
+        const okAttachments = state.attachments.filter((a) => a.ok);
+
+        bodyBtn.disabled = true;
+        bodyBtn.textContent = '作成中…（数十秒かかります）';
+        Hishoko.say('thinking', 'スライドの中身を書いています…');
+
+        const res = await window.hishoko.docBody({
+          typeId: state.typeId,
+          brief: state.brief,
+          sources: okAttachments.map((a) => ({ name: a.name, text: a.text })),
+          outline: deck,
+          model: bodyModelSelect.value,
+        });
+
+        bodyBtn.disabled = false;
+        bodyBtn.textContent = 'この構成で本文を作る';
+
+        if (!res.ok) {
+          errorEl.textContent = res.message;
+          errorEl.hidden = false;
+          Hishoko.say('trouble', 'スライドを作れませんでした');
+          if (res.code === 'no_key' || res.code === 'auth') App.go('settings');
+          return;
+        }
+
+        state.doc = res.doc;
+        if (!state.doc.title) state.doc.title = deck.title;
+        if (!state.doc.subtitle) state.doc.subtitle = deck.subtitle;
+        if (res.failed) {
+          Hishoko.say('trouble', 'スライドの読み取りに失敗しました。内容を確認して編集してください。');
+        } else {
+          Hishoko.say('smile', 'スライドができました。確認してください');
+        }
+        renderSlidePreviewScreen();
+      });
+
+      showScreen(App.h('div', {}, [
+        App.h('div', { class: 'card' }, [
+          App.h('div', { class: 'field' }, [App.h('label', { text: '資料の題名' }), titleInput]),
+          App.h('div', { class: 'field' }, [App.h('label', { text: '副題' }), subtitleInput]),
+          App.h('div', { class: 'field' }, [
+            App.h('label', { text: 'スライド構成（レイアウト・見出しの確認、並べ替え、削除ができます）' }),
+            slidesHost,
+          ]),
+          errorEl,
+          App.h('div', { class: 'actions' }, [
+            backBtn,
+            App.h('div', { class: 'model-inline' }, [App.h('span', { text: 'モデル' }), bodyModelSelect]),
+            bodyBtn,
+          ]),
+        ]),
+      ]));
+    }
+
+    // --- (3') プレゼン: スライド本文プレビュー・保存画面 ---
+    // レイアウトごとに使うフィールドが違う（compareはleft/right、bullets/closingは箇条書き、
+    // それ以外はlead）ので、layoutで出す入力欄を出し分ける。noteは常にスピーカーノートとして
+    // 編集できるようにする（スライド本体には出さない、という仕様の裏返し）。
+    function renderSlidePreviewScreen() {
+      const deck = state.doc;
+
+      const titleInput = App.h('input', { type: 'text', value: deck.title || '' });
+      titleInput.addEventListener('input', () => { deck.title = titleInput.value; });
+
+      const subtitleInput = App.h('input', { type: 'text', value: deck.subtitle || '' });
+      subtitleInput.addEventListener('input', () => { deck.subtitle = subtitleInput.value; });
+
+      const slidesHost = App.h('div', { class: 'doc-sections' });
+
+      function buildCompareSideField(slide, sideKey, label) {
+        if (!slide[sideKey] || typeof slide[sideKey] !== 'object') {
+          slide[sideKey] = { heading: '', bullets: [] };
+        }
+        const side = slide[sideKey];
+        const sideHeadingInput = App.h('input', { type: 'text', value: side.heading || '' });
+        sideHeadingInput.addEventListener('input', () => { side.heading = sideHeadingInput.value; });
+        const sideBulletsTextarea = App.h('textarea', {
+          class: 'doc-bullets', placeholder: '箇条書き（1行1項目）',
+        });
+        sideBulletsTextarea.value = (side.bullets || []).join('\n');
+        sideBulletsTextarea.addEventListener('input', () => {
+          side.bullets = sideBulletsTextarea.value.split('\n').map((t) => t.trim()).filter((t) => t);
+        });
+        return App.h('div', { class: 'field' }, [
+          App.h('label', { text: label }),
+          sideHeadingInput,
+          sideBulletsTextarea,
+        ]);
+      }
+
+      function renderSlides() {
+        while (slidesHost.firstChild) slidesHost.removeChild(slidesHost.firstChild);
+        deck.slides.forEach((s, idx) => {
+          const layoutBadge = App.h('span', { class: 'attach-chars', text: slideLayoutLabel(s.layout) });
+          const headingInput = App.h('input', { type: 'text', value: s.heading || '' });
+          headingInput.addEventListener('input', () => { s.heading = headingInput.value; });
+
+          const fieldsEl = App.h('div', { class: 'row' });
+
+          if (s.layout === 'compare') {
+            fieldsEl.appendChild(buildCompareSideField(s, 'left', '左側の見出し・箇条書き'));
+            fieldsEl.appendChild(buildCompareSideField(s, 'right', '右側の見出し・箇条書き'));
+          } else if (s.layout === 'bullets' || s.layout === 'closing') {
+            const bulletsTextarea = App.h('textarea', {
+              class: 'doc-bullets', placeholder: '箇条書き（1行1項目・最大5行）',
+            });
+            bulletsTextarea.value = (s.bullets || []).join('\n');
+            bulletsTextarea.addEventListener('input', () => {
+              s.bullets = bulletsTextarea.value.split('\n').map((t) => t.trim()).filter((t) => t);
+            });
+            fieldsEl.appendChild(App.h('div', { class: 'field' }, [
+              App.h('label', { text: '箇条書き' }),
+              bulletsTextarea,
+            ]));
+          } else {
+            // title / statement / image
+            const leadInput = App.h('input', { type: 'text', value: s.lead || '' });
+            leadInput.addEventListener('input', () => { s.lead = leadInput.value; });
+            const leadLabel = s.layout === 'image' ? '補足（画像の横に出す文）' : '副題・補足';
+            fieldsEl.appendChild(App.h('div', { class: 'field' }, [
+              App.h('label', { text: leadLabel }),
+              leadInput,
+            ]));
+            if (s.layout === 'image') {
+              fieldsEl.appendChild(App.h('div', {
+                class: 'status',
+                text: s.wantsImage
+                  ? '画像を使用します（どの画像を使うかはアプリが自動で割り当てます）'
+                  : '画像は使用しません',
+              }));
+            }
+          }
+
+          const noteTextarea = App.h('textarea', {
+            class: 'doc-paragraphs', placeholder: 'スピーカーノート（話す内容はここに書きます）',
+          });
+          noteTextarea.value = s.note || '';
+          noteTextarea.addEventListener('input', () => { s.note = noteTextarea.value; });
+          fieldsEl.appendChild(App.h('div', { class: 'field' }, [
+            App.h('label', { text: 'スピーカーノート' }),
+            noteTextarea,
+          ]));
+
+          const removeBtn = App.h('button', { class: 'ghost', text: '削除' });
+          removeBtn.addEventListener('click', () => {
+            deck.slides.splice(idx, 1);
+            renderSlides();
+          });
+
+          slidesHost.appendChild(App.h('div', { class: 'doc-section' }, [
+            App.h('div', { class: 'doc-section-row' }, [layoutBadge, headingInput, removeBtn]),
+            fieldsEl,
+          ]));
+        });
+        if (!deck.slides.length) {
+          slidesHost.appendChild(App.h('div', { class: 'status', text: 'スライドがありません。' }));
+        }
+      }
+      renderSlides();
+
+      const backBtn = App.h('button', { class: 'secondary', text: '構成案からやり直す' });
+      backBtn.addEventListener('click', () => renderSlideOutlineScreen());
+
+      const saveBtn = App.h('button', { text: '保存' });
+      const errorEl = App.h('div', { class: 'error', hidden: true });
+
+      saveBtn.addEventListener('click', async () => {
+        errorEl.hidden = true;
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = '保存中…';
+        const res = await window.hishoko.docSave({ doc: deck, format: 'pptx' });
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存';
+
+        if (!res.ok) {
+          if (res.code === 'canceled') return; // キャンセルなら何もしない
+          errorEl.textContent = res.message || '保存に失敗しました。';
+          errorEl.hidden = false;
+          Hishoko.say('trouble', '保存できませんでした');
+          return;
+        }
+        Hishoko.say('smile', '保存しました');
+        App.toast('保存しました');
+      });
+
+      showScreen(App.h('div', {}, [
+        App.h('div', { class: 'card' }, [
+          App.h('div', { class: 'field' }, [App.h('label', { text: '資料の題名' }), titleInput]),
+          App.h('div', { class: 'field' }, [App.h('label', { text: '副題' }), subtitleInput]),
+          App.h('div', { class: 'field' }, [
+            App.h('label', { text: 'スライド（編集できます）' }),
+            slidesHost,
+          ]),
+          App.h('div', { class: 'status', text: '出力形式: PowerPoint' }),
           errorEl,
           App.h('div', { class: 'actions' }, [backBtn, saveBtn]),
         ]),

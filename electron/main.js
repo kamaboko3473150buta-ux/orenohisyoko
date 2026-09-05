@@ -116,3 +116,9 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+// 資料作成でプレゼン用に抽出した画像は、保存後に消しているが（doc:save）、保存せずに
+// アプリを閉じた場合の保険として、終了時にも必ず一時フォルダを片付ける。
+app.on('before-quit', () => {
+  docgen.cleanupOnQuit();
+});
