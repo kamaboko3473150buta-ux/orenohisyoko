@@ -89,7 +89,8 @@ Views.tasks = {
       const failed = Boolean(opts.failed);
 
       const titleInput = App.h('input', { type: 'text', value: initial.title || '' });
-      const dueInput = App.h('input', { type: 'date', value: initial.due || '' });
+      const startInput = App.h('input', { type: 'date', value: initial.start || '' });
+      const endInput = App.h('input', { type: 'date', value: initial.end || '' });
       const atInput = App.h('input', { type: 'time', value: initial.at || '' });
       const whoInput = App.h('input', { type: 'text', value: initial.who || '' });
       const kindInput = App.h('input', { type: 'text', value: initial.kind || '', list: 'taskKindOptions' });
@@ -127,9 +128,15 @@ Views.tasks = {
         }
         errorEl.hidden = true;
 
+        // startだけ入っていてendが空なら、その日1日だけの予定としてendにも同じ日を入れる
+        // （設計書4-4c: 「画面側で補う」）。
+        const startVal = startInput.value || null;
+        const endVal = endInput.value || startVal || null;
+
         const patch = {
           title: t,
-          due: dueInput.value || null,
+          start: startVal,
+          end: endVal,
           at: atInput.value || null,
           who: whoInput.value.trim() || null,
           kind: kindInput.value.trim() || null,
@@ -161,13 +168,14 @@ Views.tasks = {
         notice,
         App.h('div', { class: 'field' }, [App.h('label', { text: '件名' }), titleInput]),
         App.h('div', { class: 'row' }, [
-          App.h('div', { class: 'field' }, [App.h('label', { text: '期限（日付・任意）' }), dueInput]),
-          App.h('div', { class: 'field' }, [App.h('label', { text: '時刻（予定の場合・任意）' }), atInput]),
+          App.h('div', { class: 'field' }, [App.h('label', { text: '開始日（任意）' }), startInput]),
+          App.h('div', { class: 'field' }, [App.h('label', { text: '終了日（任意・期限として使われます）' }), endInput]),
         ]),
         App.h('div', { class: 'row' }, [
+          App.h('div', { class: 'field' }, [App.h('label', { text: '時刻（予定の場合・任意）' }), atInput]),
           App.h('div', { class: 'field' }, [App.h('label', { text: '相手（任意）' }), whoInput]),
-          App.h('div', { class: 'field' }, [App.h('label', { text: '種別（任意）' }), kindInput, datalist]),
         ]),
+        App.h('div', { class: 'field' }, [App.h('label', { text: '種別（任意）' }), kindInput, datalist]),
         App.h('div', { class: 'field' }, [App.h('label', { text: '優先度' }), priorityInput]),
         App.h('div', { class: 'field' }, [App.h('label', { text: 'メモ（任意）' }), noteInput]),
         errorEl,
@@ -246,10 +254,25 @@ Views.tasks = {
       ['noDue', '期限なし'],
     ];
 
+    // 'YYYY-MM-DD' を「9/3」のような月/日の短い表記にする（先頭のゼロは付けない）。
+    function shortYmd(ymd) {
+      const m = typeof ymd === 'string' && ymd.match(/^\d{4}-(\d{2})-(\d{2})$/);
+      if (!m) return ymd || '';
+      return `${Number(m[1])}/${Number(m[2])}`;
+    }
+
+    // 期間があれば「9/3〜9/8」、1日だけなら「9/8」（時刻があれば添える）。
     function formatMeta(t) {
       const bits = [];
-      if (t.due) bits.push(t.at ? `${t.due} ${t.at}` : `${t.due} まで`);
-      else if (t.at) bits.push(t.at);
+      if (t.end) {
+        const isRange = t.start && t.start !== t.end;
+        const label = isRange ? `${shortYmd(t.start)}〜${shortYmd(t.end)}` : shortYmd(t.end);
+        if (t.at) bits.push(`${label} ${t.at}`);
+        else if (isRange) bits.push(label);
+        else bits.push(`${label} まで`);
+      } else if (t.at) {
+        bits.push(t.at);
+      }
       if (t.who) bits.push(t.who);
       return bits.join('　');
     }
@@ -269,9 +292,15 @@ Views.tasks = {
       if (groupKey === 'overdue') rowClass.push('task-overdue');
       if (groupKey === 'today') rowClass.push('task-today');
 
+      // 今日が期間内（inProgress）のものには「進行中」の印を付ける
+      // （終了日が先でも、今日動いているものを見落とさないため）。
+      const titleText = t.inProgress
+        ? `【進行中】${t.title || '(無題)'}`
+        : (t.title || '(無題)');
+
       const row = App.h('div', { class: rowClass.join(' ') }, [
         checkbox,
-        App.h('span', { class: 'task-title', text: t.title || '(無題)' }),
+        App.h('span', { class: 'task-title', text: titleText }),
         App.h('span', { class: 'task-meta', text: formatMeta(t) }),
       ]);
       row.addEventListener('click', () => openForm(t, { existingId: t.id }));
