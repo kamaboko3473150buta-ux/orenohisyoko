@@ -116,9 +116,7 @@ async function readPdfText(filePath) {
     doc = await loadingTask.promise;
     const pages = [];
     for (let i = 1; i <= doc.numPages; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
       const page = await doc.getPage(i);
-      // eslint-disable-next-line no-await-in-loop
       const content = await page.getTextContent();
       pages.push(content.items.map((it) => (it && it.str) || '').join(' '));
     }

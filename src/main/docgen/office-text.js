@@ -38,7 +38,6 @@ function extractTagContents(xml, tagName) {
   const re = new RegExp(`<${tagName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}>`, 'g');
   const out = [];
   let m;
-  // eslint-disable-next-line no-cond-assign
   while ((m = re.exec(safe)) !== null) {
     out.push(decodeXmlEntities(m[1]));
   }
@@ -52,7 +51,6 @@ function linesFromXml(xml, paraTag, textTag) {
   const paraRe = new RegExp(`<${paraTag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${paraTag}>`, 'g');
   const lines = [];
   let m;
-  // eslint-disable-next-line no-cond-assign
   while ((m = paraRe.exec(safe)) !== null) {
     lines.push(extractTagContents(m[1], textTag).join(''));
   }
