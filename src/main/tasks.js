@@ -1,9 +1,13 @@
 // src/main/tasks.js
 // タスク・予定の純粋な更新・グループ分け関数。保存はしない。Electron に依存しない。
 //
-// due（期限）は 'YYYY-MM-DD' の文字列として扱う。Date に変換して比較すると
+// 日付（start/end）は 'YYYY-MM-DD' の文字列として扱う。Date に変換して比較すると
 // タイムゾーンによって日付がずれる（例: new Date('2026-09-12') はUTC解釈になる）ため、
 // 文字列の辞書順比較で済ませる。この形式は辞書順＝日付順が一致するので安全。
+//
+// 複数日にわたる予定（出張・研修・長期の作業）を1件で扱えるよう、期限は
+// start（開始日）・end（終了日）の「期間」として持つ。期限切れ／今日などの
+// グループ分けや通知の判定には、これまでの due と同じ扱いで end を使う。
 
 const MAX_DONE = 100;
 
@@ -12,14 +16,15 @@ function asArray(v) {
 }
 
 // 'YYYY-MM-DD' 形式かどうか（暦として正しいかまでは見ない。ここでは形式の妥当性のみ）。
-function isValidDue(v) {
+// start・end のどちらにも使う。
+function isValidYmd(v) {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 }
 
 // 数値から Date を作る（ローカル時刻）。文字列を直接 new Date() に渡すとUTC解釈されて
 // タイムゾーンでずれるため、必ず年月日の数値から組み立てる。
-function ymdToDate(due) {
-  const [y, m, d] = due.split('-').map(Number);
+function ymdToDate(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
@@ -30,14 +35,14 @@ function dateToYmd(dt) {
   return `${y}-${m}-${d}`;
 }
 
-function addDays(due, days) {
-  const dt = ymdToDate(due);
+function addDays(ymd, days) {
+  const dt = ymdToDate(ymd);
   dt.setDate(dt.getDate() + days);
   return dateToYmd(dt);
 }
 
-function dayOfWeek(due) {
-  return ymdToDate(due).getDay(); // 0=日, 1=月, ... 6=土
+function dayOfWeek(ymd) {
+  return ymdToDate(ymd).getDay(); // 0=日, 1=月, ... 6=土
 }
 
 function normalizePriority(p) {
@@ -49,11 +54,16 @@ function randomSuffix() {
 }
 
 // タスクを1件作る。title 以外は任意で、無ければ null（note のみ空文字）。
-function newTask({ title, due, at, who, kind, priority, note } = {}, nowIso) {
+// end を省略して start だけ渡された場合は、その日1日だけの予定として end にも
+// 同じ日を入れる（複数日の期間ではなく単発の予定・タスクとして扱うため）。
+function newTask({ title, start, end, at, who, kind, priority, note } = {}, nowIso) {
+  const s = start || null;
+  const e = end || s || null;
   return {
     id: `${nowIso}-${randomSuffix()}`,
     title: title == null ? '' : String(title),
-    due: due || null,
+    start: s,
+    end: e,
     at: at || null,
     who: who || null,
     kind: kind || null,
@@ -63,6 +73,25 @@ function newTask({ title, due, at, who, kind, priority, note } = {}, nowIso) {
     createdAt: nowIso,
     doneAt: null,
   };
+}
+
+// 旧形式（due だけを持つ）のタスクを、start/end 形式に移す。
+// due は end に移し、start は null のままにする（開始日は元データに無い情報なので補わない）。
+// 既存ユーザーの tasks.json を読み込むたびに通す前提のため、何度かけても壊れない
+// （一度移行した項目は due を持たないので、2回目以降は何もしない）。
+// null・配列でない・壊れた項目が混ざっていても落ちない。
+function migrateTasks(list) {
+  const safe = asArray(list);
+  return safe.map((t) => {
+    if (!t || typeof t !== 'object') return t;
+    if (!Object.prototype.hasOwnProperty.call(t, 'due')) return t;
+    const { due, start, end, ...rest } = t;
+    return {
+      ...rest,
+      start: start == null ? null : start,
+      end: end == null ? (due == null ? null : due) : end,
+    };
+  });
 }
 
 function addTask(list, task) {
@@ -113,34 +142,49 @@ function compareForDisplay(a, b) {
   return priorityRank(a && a.priority) - priorityRank(b && b.priority);
 }
 
-// today（'YYYY-MM-DD'）を基準にグループ分けする。
+// 今日が start〜end の期間内かどうか。
+// - start・end の両方がある: start <= today && today <= end
+// - start が無い: end === today のときだけ true（終了日の当日だけ「進行中」として扱う）
+// - どちらも無い（あるいは today 自体が不正）: false
+function computeInProgress(t, today) {
+  if (!t || typeof t !== 'object' || !isValidYmd(today)) return false;
+  const hasStart = isValidYmd(t.start);
+  const hasEnd = isValidYmd(t.end);
+  if (hasStart && hasEnd) return t.start <= today && today <= t.end;
+  if (!hasStart) return hasEnd && t.end === today;
+  return false;
+}
+
+// today（'YYYY-MM-DD'）を基準にグループ分けする。判定は end（終了日）で行う。
 // 「今週」の残り: 明日の翌日から、今日を含む週の日曜日まで（週は日曜終わり）。
+// 各項目には表示用に inProgress（今日が期間内かどうか）を付けて返す。
 function groupTasks(list, today) {
   const groups = {
     overdue: [], today: [], tomorrow: [], thisWeek: [], later: [], noDue: [], done: [],
   };
   const safe = asArray(list);
-  const todayValid = isValidDue(today);
+  const todayValid = isValidYmd(today);
 
   const tomorrow = todayValid ? addDays(today, 1) : null;
   const daysToSunday = todayValid ? (7 - dayOfWeek(today)) % 7 : null;
   const weekEnd = todayValid ? addDays(today, daysToSunday) : null;
   const thisWeekStart = todayValid ? addDays(today, 2) : null;
 
-  for (const t of safe) {
-    if (!t || typeof t !== 'object') continue;
+  for (const raw of safe) {
+    if (!raw || typeof raw !== 'object') continue;
+    const t = { ...raw, inProgress: computeInProgress(raw, today) };
     if (t.done) {
       groups.done.push(t);
       continue;
     }
-    if (!todayValid || !isValidDue(t.due)) {
+    if (!todayValid || !isValidYmd(t.end)) {
       groups.noDue.push(t);
       continue;
     }
-    if (t.due < today) groups.overdue.push(t);
-    else if (t.due === today) groups.today.push(t);
-    else if (t.due === tomorrow) groups.tomorrow.push(t);
-    else if (thisWeekStart && weekEnd && thisWeekStart <= weekEnd && t.due >= thisWeekStart && t.due <= weekEnd) {
+    if (t.end < today) groups.overdue.push(t);
+    else if (t.end === today) groups.today.push(t);
+    else if (t.end === tomorrow) groups.tomorrow.push(t);
+    else if (thisWeekStart && weekEnd && thisWeekStart <= weekEnd && t.end >= thisWeekStart && t.end <= weekEnd) {
       groups.thisWeek.push(t);
     } else {
       groups.later.push(t);
@@ -158,21 +202,21 @@ function groupTasks(list, today) {
   return groups;
 }
 
-// 期限切れ・今日締切の件数（未完了のみ）。吹き出しでの通知に使う。
+// 期限切れ・今日締切の件数（未完了のみ）。吹き出しでの通知に使う。判定は end で行う。
 function countDueSoon(list, today) {
   const safe = asArray(list);
-  if (!isValidDue(today)) return { overdue: 0, today: 0 };
+  if (!isValidYmd(today)) return { overdue: 0, today: 0 };
   let overdue = 0;
   let todayCount = 0;
   for (const t of safe) {
     if (!t || typeof t !== 'object' || t.done) continue;
-    if (!isValidDue(t.due)) continue;
-    if (t.due < today) overdue += 1;
-    else if (t.due === today) todayCount += 1;
+    if (!isValidYmd(t.end)) continue;
+    if (t.end < today) overdue += 1;
+    else if (t.end === today) todayCount += 1;
   }
   return { overdue, today: todayCount };
 }
 
 module.exports = {
-  newTask, addTask, updateTask, removeTask, toggleDone, pruneDone, groupTasks, countDueSoon,
+  newTask, addTask, updateTask, removeTask, toggleDone, pruneDone, groupTasks, countDueSoon, migrateTasks,
 };

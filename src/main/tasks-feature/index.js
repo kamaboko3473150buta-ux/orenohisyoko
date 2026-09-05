@@ -7,6 +7,7 @@
 const { ipcMain } = require('electron');
 const {
   newTask, addTask, updateTask, removeTask, toggleDone, pruneDone, groupTasks, countDueSoon,
+  migrateTasks,
 } = require('../tasks');
 const {
   buildParseSystemPrompt, buildParseUserPrompt, parseTaskJson,
@@ -28,9 +29,14 @@ function todayYmd(now = new Date()) {
 }
 
 function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
+  // 保存されているタスクは旧形式（dueだけを持つ）のことがあるため、読み込むたびに
+  // migrateTasksを通してstart/end形式に揃える。既存ユーザーの記録を失わないための
+  // 移行なので、保存元（tasks.json）を直接書き換えるのではなく読み込み時に毎回かける。
+  const readTasks = () => migrateTasks(getTasks());
+
   // 一覧をグループ分け済みの形で渡す。締切の知らせ（F-20）に使う件数も一緒に返す。
   ipcMain.handle('task:list', () => {
-    const list = getTasks();
+    const list = readTasks();
     const today = todayYmd();
     return { groups: groupTasks(list, today), dueSoon: countDueSoon(list, today) };
   });
@@ -39,23 +45,23 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
   ipcMain.handle('task:add', (_e, input) => {
     const now = new Date().toISOString();
     const task = newTask(input || {}, now);
-    saveTasks(pruneDone(addTask(getTasks(), task)));
+    saveTasks(pruneDone(addTask(readTasks(), task)));
     return { ok: true, task };
   });
 
   ipcMain.handle('task:update', (_e, { id, patch } = {}) => {
-    saveTasks(updateTask(getTasks(), id, patch || {}));
+    saveTasks(updateTask(readTasks(), id, patch || {}));
     return { ok: true };
   });
 
   ipcMain.handle('task:remove', (_e, { id } = {}) => {
-    saveTasks(removeTask(getTasks(), id));
+    saveTasks(removeTask(readTasks(), id));
     return { ok: true };
   });
 
   ipcMain.handle('task:toggle', (_e, { id } = {}) => {
     const now = new Date().toISOString();
-    saveTasks(pruneDone(toggleDone(getTasks(), id, now)));
+    saveTasks(pruneDone(toggleDone(readTasks(), id, now)));
     return { ok: true };
   });
 
@@ -82,7 +88,7 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
   // 未完了タスクをもとに「今日の進め方」を相談する。タスクの中身は書き換えない。
   ipcMain.handle('task:brief', async (_e, { model } = {}) => {
     const settings = getSettings();
-    const notDone = getTasks().filter((t) => t && !t.done);
+    const notDone = readTasks().filter((t) => t && !t.done);
     const result = await generateText({
       apiKey: settings.apiKey,
       system: buildBriefSystemPrompt(),

@@ -15,8 +15,10 @@ function buildParseSystemPrompt() {
     '',
     '出力のきまり:',
     '- 出力は JSON のみ。前置き・説明・コードフェンス（```）は一切書かない。',
-    '- 出力する項目は title, due, at, who, kind, priority の6つだけ。',
-    '- due は "YYYY-MM-DD" 形式、at は "HH:MM" 形式で書く。',
+    '- 出力する項目は title, start, end, at, who, kind, priority の7つだけ。',
+    '- start は開始日、end は終了日。どちらも "YYYY-MM-DD" 形式、at は "HH:MM" 形式で書く。',
+    '- 「来週月曜から金曜まで」のように期間が読み取れたら、start に開始日、end に終了日を入れる。',
+    '- 期間ではなく1日だけの予定・タスクなら、start と end に同じ日を入れる。',
     '- 読み取れない項目は null にする。推測で埋めない。',
     '- kind は「提出」「連絡」「会議」「移動」「その他」のいずれかから選ぶ。',
     '- priority は "high" "normal" "low" のいずれか。指定が読み取れなければ "normal" にする。',
@@ -41,7 +43,8 @@ function sanitizeString(v) {
   return t || null;
 }
 
-function sanitizeDue(v) {
+// start・end のどちらの検証にも使う。形式が違えば null にする。
+function sanitizeYmd(v) {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
@@ -83,7 +86,8 @@ function parseTaskJson(raw, fallbackText) {
   return {
     task: {
       title,
-      due: sanitizeDue(obj.due),
+      start: sanitizeYmd(obj.start),
+      end: sanitizeYmd(obj.end),
       at: sanitizeAt(obj.at),
       who: sanitizeString(obj.who),
       kind: sanitizeString(obj.kind),
@@ -110,7 +114,8 @@ function buildBriefUserPrompt({ tasks, today } = {}) {
   const list = Array.isArray(tasks) ? tasks : [];
   const lines = list.map((t) => {
     const title = (t && clean(t.title)) || '(無題)';
-    const due = (t && clean(t.due)) || '期限なし';
+    // 期限の判定は終了日（end）で行う方針に合わせる（4-4c参照）。
+    const due = (t && clean(t.end)) || '期限なし';
     const at = (t && clean(t.at)) ? ` ${clean(t.at)}` : '';
     const priority = (t && clean(t.priority)) || 'normal';
     return `- ${title}（期限: ${due}${at} / 優先度: ${priority}）`;
