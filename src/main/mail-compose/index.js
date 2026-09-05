@@ -72,10 +72,13 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
     const recipients = normalizeRecipients(input);
     const toRecipients = recipients.filter((r) => r.field === 'to');
 
+    // 画面で選んだモデル（その回だけの上書き）。未指定なら設定の既定（メール機能）を使う。
+    const model = (input && input.model) || settings.models.mail;
     const result = await generateBody({
       apiKey: settings.apiKey,
       system: buildSystemPrompt(),
       user: buildUserPrompt({ ...input, recipients: toRecipients }),
+      model,
     });
     if (!result.ok) return result;
 
@@ -104,10 +107,12 @@ function register({ getSettings, getContacts, saveContacts, getHistory, saveHist
   // 押している前提のため）。宛先が無いので宛先履歴には保存しない。
   ipcMain.handle('mail:generateReply', async (_e, input) => {
     const settings = getSettings();
+    const model = (input && input.model) || settings.models.mail;
     const result = await generateBody({
       apiKey: settings.apiKey,
       system: buildReplySystemPrompt(),
       user: buildReplyUserPrompt(input),
+      model,
     });
     if (!result.ok) return result;
 

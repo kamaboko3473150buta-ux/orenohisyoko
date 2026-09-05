@@ -61,13 +61,15 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
 
   // 話し言葉の1行をAIで構造化するだけで、登録はしない。
   // 画面側が確認フォームを挟んでから改めて task:add を呼ぶ（誤読をそのまま登録させないため）。
-  ipcMain.handle('task:parse', async (_e, { text } = {}) => {
+  ipcMain.handle('task:parse', async (_e, { text, model } = {}) => {
     const settings = getSettings();
     const result = await generateText({
       apiKey: settings.apiKey,
       system: buildParseSystemPrompt(),
       user: buildParseUserPrompt({ text, today: todayYmd() }),
       maxTokens: PARSE_MAX_TOKENS,
+      // 画面で選んだモデル（その回だけの上書き）。未指定なら設定の既定（タスク機能）を使う。
+      model: model || settings.models.task,
     });
     if (!result.ok) return result; // no_key / auth / timeout などはそのまま画面に伝える
 
@@ -78,7 +80,7 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
   });
 
   // 未完了タスクをもとに「今日の進め方」を相談する。タスクの中身は書き換えない。
-  ipcMain.handle('task:brief', async () => {
+  ipcMain.handle('task:brief', async (_e, { model } = {}) => {
     const settings = getSettings();
     const notDone = getTasks().filter((t) => t && !t.done);
     const result = await generateText({
@@ -86,6 +88,7 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
       system: buildBriefSystemPrompt(),
       user: buildBriefUserPrompt({ tasks: notDone, today: todayYmd() }),
       maxTokens: BRIEF_MAX_TOKENS,
+      model: model || settings.models.task,
     });
     if (!result.ok) return result;
 

@@ -5,6 +5,7 @@ const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
 const { summarize } = require('../src/main/usage');
+const { MODELS, FEATURES } = require('../src/main/models');
 const contactsLib = require('../src/main/contacts');
 const mailCompose = require('../src/main/mail-compose');
 const tasksFeature = require('../src/main/tasks-feature');
@@ -55,6 +56,7 @@ function registerCommonHandlers() {
       defaultTone: s.defaultTone,
       defaultMailer: s.defaultMailer,
       defaultTaskInput: s.defaultTaskInput,
+      models: s.models,
     };
   });
 
@@ -68,8 +70,13 @@ function registerCommonHandlers() {
       defaultTone: s.defaultTone,
       defaultMailer: s.defaultMailer,
       defaultTaskInput: s.defaultTaskInput,
+      models: s.models,
     };
   });
+
+  // モデルの一覧と、機能ごとの既定モデル定義を画面に渡す（Task 33）。
+  // APIキーなど秘匿情報は含まない。単価はmodels.jsに一本化されているのでそのまま渡す。
+  ipcMain.handle('models:list', () => ({ models: MODELS, features: FEATURES }));
 
   ipcMain.handle('settings:counts', () => ({
     contacts: getContacts().contacts.length,

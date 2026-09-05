@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('hishoko', {
   getUsage: () => ipcRenderer.invoke('usage:get'),
   clearUsage: () => ipcRenderer.invoke('usage:clear'),
 
+  // 選べるモデルの一覧・機能ごとの既定（Task 33）
+  modelsList: () => ipcRenderer.invoke('models:list'),
+
   // メール文面作成
   mailMeta: () => ipcRenderer.invoke('mail:meta'),
   mailHistory: () => ipcRenderer.invoke('mail:history'),
@@ -36,5 +39,5 @@ contextBridge.exposeInMainWorld('hishoko', {
   taskRemove: (args) => ipcRenderer.invoke('task:remove', args),
   taskToggle: (args) => ipcRenderer.invoke('task:toggle', args),
   taskParse: (args) => ipcRenderer.invoke('task:parse', args),
-  taskBrief: () => ipcRenderer.invoke('task:brief'),
+  taskBrief: (args) => ipcRenderer.invoke('task:brief', args),
 });

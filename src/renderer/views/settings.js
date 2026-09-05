@@ -6,6 +6,11 @@ Views.settings = {
     App.setTitle('設定');
     const s = await window.hishoko.getSettings();
     const counts = await window.hishoko.getCounts();
+    const modelMeta = await window.hishoko.modelsList(); // { models, features }
+    const modelLabel = (id) => {
+      const m = modelMeta.models.find((x) => x.id === id);
+      return m ? m.label : id;
+    };
 
     // APIキー
     const keyInput = App.h('input', { type: 'text', placeholder: 'sk-ant-...' });
@@ -79,6 +84,43 @@ Views.settings = {
       App.h('div', { class: 'actions' }, [saveBtn]),
     ]));
 
+    // 使うモデル（Task 33）。機能ごとに既定モデルを選ぶ。ここでの選択が各画面の初期値になる。
+    const modelSelects = {};
+    const modelFields = modelMeta.features.map((f) => {
+      const select = App.h('select');
+      const noteEl = App.h('div', { class: 'status' });
+      const paintNote = () => {
+        const m = modelMeta.models.find((x) => x.id === select.value);
+        noteEl.textContent = m ? m.note : '';
+      };
+      modelMeta.models.forEach((m) => {
+        const opt = App.h('option', { value: m.id, text: m.label });
+        if ((s.models && s.models[f.id]) === m.id) opt.selected = true;
+        select.appendChild(opt);
+      });
+      paintNote();
+      select.addEventListener('change', paintNote);
+      modelSelects[f.id] = select;
+      return App.h('div', { class: 'field' }, [App.h('label', { text: f.label }), select, noteEl]);
+    });
+
+    const saveModelsBtn = App.h('button', { text: '保存' });
+    saveModelsBtn.addEventListener('click', async () => {
+      const patch = {};
+      modelMeta.features.forEach((f) => { patch[f.id] = modelSelects[f.id].value; });
+      await window.hishoko.saveSettings({ models: patch });
+      App.toast('使うモデルを保存しました');
+    });
+
+    root.appendChild(App.h('div', { class: 'card' }, [
+      App.h('div', { class: 'field' }, [
+        App.h('label', { text: '使うモデル' }),
+        App.h('div', { class: 'status', text: '各画面ではこの回だけ変えられます（ここでの設定は既定値です）。' }),
+      ]),
+      ...modelFields,
+      App.h('div', { class: 'actions' }, [saveModelsBtn]),
+    ]));
+
     // アドレス帳と文面履歴
     // 「履歴」ではなく自分で育てた資産なので、消すときは必ず確認を挟む。
     const contactsLabel = App.h('div', { class: 'status', text: `アドレス帳の連絡先: ${counts.contacts}件` });
@@ -103,31 +145,48 @@ Views.settings = {
       App.h('div', { class: 'actions' }, [clearContactsBtn, clearHistoryBtn]),
     ]));
 
-    // API利用状況（Task 19）。トークン数はこのアプリで記録した実績、金額はそこからの概算。
+    // API利用状況（Task 19・33）。トークン数はこのアプリで記録した実績、金額はそこからの概算。
+    // Task 33: モデル別の内訳（byModel）も添える。
     const fmtNum = (n) => Number(n || 0).toLocaleString('ja-JP');
     const fmtJpy = (n) => `¥${Math.round(n || 0).toLocaleString('ja-JP')}`;
     const fmtUsd = (n) => `$${(n || 0).toFixed(2)}`;
     const describeMonth = (m) => (m.count
       ? `${m.month}: ${fmtNum(m.count)}通 / 入力${fmtNum(m.inputTokens)}・出力${fmtNum(m.outputTokens)}トークン / 概算 ${fmtJpy(m.costJpy)}（${fmtUsd(m.costUsd)}）`
       : `${m.month}: まだ利用がありません`);
+    const describeTotal = (t) => `${fmtNum(t.count)}通 / 概算 ${fmtJpy(t.costJpy)}（${fmtUsd(t.costUsd)}）`;
+    // モデル別の内訳の行だけを作る（利用が無いモデルは出さない）。
+    const byModelLines = (byModel) => Object.entries(byModel || {})
+      .filter(([, e]) => e.count)
+      .map(([id, e]) => `　- ${modelLabel(id)}: ${fmtNum(e.count)}通 / 入力${fmtNum(e.inputTokens)}・出力${fmtNum(e.outputTokens)}トークン / 概算 ${fmtJpy(e.costJpy)}（${fmtUsd(e.costUsd)}）`);
+    const appendByModel = (host, byModel) => {
+      byModelLines(byModel).forEach((line) => host.appendChild(App.h('div', { class: 'status', text: line })));
+    };
 
     const usageWrap = App.h('div');
     const paintUsage = (u) => {
       while (usageWrap.firstChild) usageWrap.removeChild(usageWrap.firstChild);
 
+      const currentBlock = App.h('div');
+      currentBlock.appendChild(App.h('div', { class: 'status', text: describeMonth(u.current) }));
+      appendByModel(currentBlock, u.current.byModel);
+
       const monthsBlock = App.h('div');
       if (u.months.length) {
-        u.months.forEach((m) => monthsBlock.appendChild(App.h('div', { class: 'status', text: describeMonth(m) })));
+        u.months.forEach((m) => {
+          monthsBlock.appendChild(App.h('div', { class: 'status', text: describeMonth(m) }));
+          appendByModel(monthsBlock, m.byModel);
+        });
       } else {
         monthsBlock.appendChild(App.h('div', { class: 'status', text: '記録はまだありません' }));
       }
 
-      usageWrap.appendChild(App.h('div', { class: 'field' }, [App.h('label', { text: '当月' }), App.h('div', { class: 'status', text: describeMonth(u.current) })]));
+      const totalBlock = App.h('div');
+      totalBlock.appendChild(App.h('div', { class: 'status', text: describeTotal(u.total) }));
+      appendByModel(totalBlock, u.total.byModel);
+
+      usageWrap.appendChild(App.h('div', { class: 'field' }, [App.h('label', { text: '当月' }), currentBlock]));
       usageWrap.appendChild(App.h('div', { class: 'field' }, [App.h('label', { text: '月別' }), monthsBlock]));
-      usageWrap.appendChild(App.h('div', { class: 'field' }, [
-        App.h('label', { text: '累計' }),
-        App.h('div', { class: 'status', text: `${fmtNum(u.total.count)}通 / 概算 ${fmtJpy(u.total.costJpy)}（${fmtUsd(u.total.costUsd)}）` }),
-      ]));
+      usageWrap.appendChild(App.h('div', { class: 'field' }, [App.h('label', { text: '累計' }), totalBlock]));
     };
 
     const usage = await window.hishoko.getUsage();
