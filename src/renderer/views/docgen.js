@@ -56,7 +56,7 @@ Views.docgen = {
     const state = {
       typeId: types[0] ? types[0].id : 'report',
       brief: '',
-      attachments: [], // { ok, name, chars, error, text }
+      attachments: [], // { ok, name, chars, originalChars, truncated, error, text }
       imageCount: 0, // 添付から抽出できた画像の枚数（プレゼン資料でのみ使う）
       outline: null, // 通常: { title, sections: [{ heading, points }] } / プレゼン: deck
       doc: null, // 通常: { title, sections: [{ heading, paragraphs, bullets }] } / プレゼン: deck
@@ -131,8 +131,16 @@ Views.docgen = {
       function renderAttachList() {
         while (attachList.firstChild) attachList.removeChild(attachList.firstChild);
         state.attachments.forEach((a, idx) => {
+          // 省略した場合だけ「元N字 → 渡すM字」を出す（省略していないファイルにまで
+          // 出すと「渡す文字数」の意味が薄れるため）。costの計算は引き続きa.chars
+          // （実際に渡す文字数）を使う。
+          const infoText = a.ok && a.truncated
+            ? `元${a.originalChars.toLocaleString()}字 → 渡す${a.chars.toLocaleString()}字`
+            : a.ok
+              ? `${a.chars.toLocaleString()}字`
+              : '';
           const infoEl = a.ok
-            ? App.h('span', { class: 'attach-chars', text: `${a.chars.toLocaleString()}字` })
+            ? App.h('span', { class: 'attach-chars', text: infoText })
             : App.h('span', { class: 'attach-error', text: `読み取れませんでした: ${a.error}` });
           const removeBtn = App.h('button', { class: 'ghost attach-remove', text: '✕' });
           removeBtn.addEventListener('click', () => {
