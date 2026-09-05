@@ -60,19 +60,27 @@ function sanitizeString(v) {
 
 // ---- 構成案 ----
 
-function buildOutlineSystemPrompt(typeId) {
+// system は構成案と本文で**まったく同じ**にする。
+// プロンプトキャッシュは system から前方一致で判定されるため、ここが1文字でも違うと
+// 参考資料のキャッシュが一度も当たらず、書き込み料金（1.25倍）だけ余計に払うことになる。
+// 段階ごとの違い（何を出すか・出力するJSONの形）は user 側の後半に置く。
+function buildDocSystemPrompt(typeId) {
   const type = findDocType(typeId);
   return [
-    `あなたは秘書として「${type.label}」の構成案を作るアシスタントです。`,
+    `あなたは秘書として「${type.label}」を作るアシスタントです。`,
     '',
     `【${type.label}の作法】`,
     type.guide,
     '',
     '出力のきまり:',
     '- 出力は JSON のみ。前置き・説明・コードフェンス（```）は一切書かない。',
-    '- 出力する形は { "title": "資料の題名", "sections": [ { "heading": "見出し", "points": ["要点1", "要点2"] } ] } のみ。',
     '- 参考資料に書かれていないことを創作しない。不明な点は ［ ］ の空欄にする。',
+    '- 出力する JSON の形は依頼のたびに指定する。指定された形だけを出す。',
   ].join('\n');
+}
+
+function buildOutlineSystemPrompt(typeId) {
+  return buildDocSystemPrompt(typeId);
 }
 
 function buildOutlineUserPrompt({ typeId, brief, sources, today } = {}) {
@@ -87,6 +95,9 @@ function buildOutlineUserPrompt({ typeId, brief, sources, today } = {}) {
     '',
     '【参考資料】',
     formatSources(sources),
+    '',
+    '【この依頼で出す JSON の形】',
+    '{ "title": "資料の題名", "sections": [ { "heading": "見出し", "points": ["要点1", "要点2"] } ] }',
     '',
     '上記をもとに、構成案をJSONのみで出力してください。',
   ].join('\n');
@@ -127,19 +138,7 @@ function parseOutlineJson(raw) {
 // ---- 本文 ----
 
 function buildBodySystemPrompt(typeId) {
-  const type = findDocType(typeId);
-  return [
-    `あなたは秘書として「${type.label}」の本文を仕上げるアシスタントです。`,
-    '',
-    `【${type.label}の作法】`,
-    type.guide,
-    '',
-    '出力のきまり:',
-    '- 出力は JSON のみ。前置き・説明・コードフェンス（```）は一切書かない。',
-    '- 出力する形は { "title": "資料の題名", "sections": [ { "heading": "見出し", "paragraphs": ["段落1"], "bullets": ["箇条書き1"] } ] } のみ。',
-    '- 与えられた構成案の見出しの並びと数を守り、指定が無い見出しを勝手に増やさない。',
-    '- 参考資料に書かれていないことを創作しない。不明な点は ［ ］ の空欄にする。',
-  ].join('\n');
+  return buildDocSystemPrompt(typeId);
 }
 
 // 確定した構成案を「見出しと要点」の形でプロンプトに埋め込む文字列にする。
@@ -174,6 +173,10 @@ function buildBodyUserPrompt({ typeId, brief, sources, outline, today } = {}) {
     '【参考資料】',
     formatSources(sources),
     '',
+    '【この依頼で出す JSON の形】',
+    '{ "title": "資料の題名", "sections": [ { "heading": "見出し", "paragraphs": ["段落1"], "bullets": ["箇条書き1"] } ] }',
+    '',
+    '確定した構成の見出しの並びと数を守り、指定が無い見出しを勝手に増やさないでください。',
     '上記の構成に沿って、本文をJSONのみで出力してください。',
   ].join('\n');
 }
@@ -254,10 +257,14 @@ function formatSlideOutline(outline) {
     .join('\n');
 }
 
-function buildSlideOutlineSystemPrompt() {
+// スライドでも system は構成案と本文で**まったく同じ**にする。
+// プロンプトキャッシュは system から前方一致で見るため、ここが違うと参考資料の
+// キャッシュが当たらず、書き込み料金だけ余計に払うことになる。
+// 段階ごとの違い（何を出すか・JSONの形）は user 側の後半に置く。
+function buildSlideSystemPrompt() {
   const type = findDocType('presentation');
   return [
-    'あなたは秘書としてプレゼン資料（スライド）の構成案を作るアシスタントです。',
+    'あなたは秘書としてプレゼン資料（スライド）を作るアシスタントです。',
     '',
     `【${type.label}の作法】`,
     type.guide,
@@ -269,21 +276,24 @@ function buildSlideOutlineSystemPrompt() {
     '  良い例: 「課題だけの1枚」→「原因だけの1枚」→「対策だけの1枚」に分ける。',
     '- 見出しは体言止め（名詞で終わる）ではなく、言い切りの文にする。',
     '  悪い例: 「入力業務の課題」　良い例: 「現場の入力に月40時間かかっている」',
+    '- 箇条書きは1スライド最大5行、1行30字以内。文章を書かない。',
+    '  説明・背景・話す内容は note（スピーカーノート）に書き、スライド本体には置かない。',
     `- レイアウトは6種類（${SLIDE_LAYOUTS.join(' / ')}）を使い分け、`,
     '  bullets を2枚以上連続させない。数字や結論を強く伝えたいスライドは statement、',
     '  2つを比べるスライドは compare にする。',
     '- 資料の最初の1枚は layout:"title"（表紙）、最後の1枚は layout:"closing"（まとめ・次の一歩）にする。',
+    '- wantsImage は図を見せたいスライドにだけ true を付ける。どの画像を使うかは考えなくてよい'
+      + '（画像の中身は見せていないので、選ぶのはアプリ側の役目）。',
     '',
     '出力のきまり:',
     '- 出力は JSON のみ。前置き・説明・コードフェンス（```）は一切書かない。',
-    '- 出力する形は { "title": "資料の題名", "subtitle": "副題", "slides": [ { '
-      + `"layout": "${SLIDE_LAYOUTS.join('|')}", `
-      + '"heading": "見出し（言い切り）", '
-      + '"lead": "statement/imageのときだけ使う短い一言（他のlayoutでは省略可）" } ] } のみ。',
-    '- この段階では bullets の中身や note（スピーカーノート）はまだ書かなくてよい。'
-      + 'スライドの枚数・順番・レイアウト・見出しを決めることに集中する。',
     '- 参考資料に書かれていないことを創作しない。不明な点は ［ ］ の空欄にする。',
+    '- 出力する JSON の形は依頼のたびに指定する。指定された形だけを出す。',
   ].join('\n');
+}
+
+function buildSlideOutlineSystemPrompt() {
+  return buildSlideSystemPrompt();
 }
 
 function buildSlideOutlineUserPrompt({ brief, sources, imageCount, today } = {}) {
@@ -300,49 +310,21 @@ function buildSlideOutlineUserPrompt({ brief, sources, imageCount, today } = {})
     '',
     `【使える画像】${formatImageCountNote(imageCount)}`,
     '',
+    '【この依頼で出す JSON の形】',
+    '{ "title": "資料の題名", "subtitle": "副題", "slides": [ { '
+      + `"layout": "${SLIDE_LAYOUTS.join('|')}", `
+      + '"heading": "見出し（言い切り）", '
+      + '"lead": "statement/imageのときだけ使う短い一言", '
+      + '"wantsImage": true } ] }',
+    'この段階では bullets の中身や note はまだ書かなくてよい。'
+      + 'スライドの枚数・順番・レイアウト・見出しを決めることに集中する。',
+    '',
     '上記をもとに、スライド構成案をJSONのみで出力してください。',
   ].join('\n');
 }
 
 function buildSlideBodySystemPrompt() {
-  const type = findDocType('presentation');
-  return [
-    'あなたは秘書としてプレゼン資料（スライド）の中身を仕上げるアシスタントです。',
-    '',
-    `【${type.label}の作法】`,
-    type.guide,
-    '',
-    '【最重要: 文字だらけのスライドを絶対に作らないこと】',
-    'これはレポートではありません。見出しと箇条書きをただ流し込むだけの資料は失敗作です。',
-    '- 1スライド1メッセージ。1枚で伝える内容は1つだけに絞る。',
-    '- 箇条書きは1スライド最大5行、1行30字以内にする。文章（である調・ですます調の説明文）を書かない。',
-    '  悪い例: 「現行システムでは入力した内容を別のシステムにも手作業で転記する必要があり、'
-      + '月間で約40時間の工数が発生している」',
-    '  良い例: 「二重入力で月40時間の工数」',
-    '- 話す内容（背景の説明・補足・言い訳）はスライド本体ではなく note（スピーカーノート）に書く。'
-      + 'スライドには結論だけを残す。',
-    '- 同じレイアウト（特に bullets）を2枚以上続けない。数字や結論を伝えるスライドは statement、',
-    '  2つを比べるスライドは compare にする。',
-    '- 資料の最初の1枚は layout:"title"、最後の1枚は layout:"closing"（まとめ・次の一歩）にする。',
-    '- 与えられた構成案のスライド枚数・順番・レイアウトを守り、勝手に増減しない。',
-    '',
-    '出力のきまり:',
-    '- 出力は JSON のみ。前置き・説明・コードフェンス（```）は一切書かない。',
-    '- 出力する形は次の通り（layoutによって使うフィールドが変わる）。',
-    '  { "title": "資料の題名", "subtitle": "副題", "slides": [',
-    '    { "layout": "title", "heading": "表紙の題名", "lead": "副題", "note": "…" },',
-    '    { "layout": "statement", "heading": "言い切りの結論", "lead": "補足を一言だけ", "note": "…" },',
-    '    { "layout": "bullets", "heading": "見出し", "bullets": ["最大5行・1行30字以内"], "note": "…" },',
-    '    { "layout": "compare", "heading": "見出し", '
-      + '"left": { "heading": "左の見出し", "bullets": ["…"] }, '
-      + '"right": { "heading": "右の見出し", "bullets": ["…"] }, "note": "…" },',
-    '    { "layout": "image", "heading": "見出し", "lead": "補足を一言だけ", "wantsImage": true, "note": "…" },',
-    '    { "layout": "closing", "heading": "まとめ", "bullets": ["次の一歩など最大5行"], "note": "…" }',
-    '  ] }',
-    '- wantsImage は図を見せたいスライドにだけ true を付ける。どの画像を使うかは考えなくてよい'
-      + '（画像の中身は見せていないので、選ぶのはアプリ側の役目）。',
-    '- 参考資料に書かれていないことを創作しない。不明な点は ［ ］ の空欄にする。',
-  ].join('\n');
+  return buildSlideSystemPrompt();
 }
 
 function buildSlideBodyUserPrompt({ brief, sources, outline, imageCount } = {}) {
@@ -359,6 +341,19 @@ function buildSlideBodyUserPrompt({ brief, sources, outline, imageCount } = {}) 
     formatSources(sources),
     '',
     `【使える画像】${formatImageCountNote(imageCount)}`,
+    '',
+    '【この依頼で出す JSON の形】（layoutによって使うフィールドが変わる）',
+    '{ "title": "資料の題名", "subtitle": "副題", "slides": [',
+    '  { "layout": "title", "heading": "表紙の題名", "lead": "副題", "note": "…" },',
+    '  { "layout": "statement", "heading": "言い切りの結論", "lead": "補足を一言だけ", "note": "…" },',
+    '  { "layout": "bullets", "heading": "見出し", "bullets": ["最大5行・1行30字以内"], "note": "…" },',
+    '  { "layout": "compare", "heading": "見出し", '
+      + '"left": { "heading": "左の見出し", "bullets": ["…"] }, '
+      + '"right": { "heading": "右の見出し", "bullets": ["…"] }, "note": "…" },',
+    '  { "layout": "image", "heading": "見出し", "lead": "補足を一言だけ", "wantsImage": true, "note": "…" },',
+    '  { "layout": "closing", "heading": "まとめ", "bullets": ["次の一歩など最大5行"], "note": "…" }',
+    '] }',
+    '確定した構成のスライド枚数・順番・レイアウトを守り、勝手に増減しないでください。',
     '',
     '上記の構成に沿って、スライドの中身をJSONのみで出力してください。',
   ].join('\n');
