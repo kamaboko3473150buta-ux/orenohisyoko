@@ -10,6 +10,7 @@ const contactsLib = require('../src/main/contacts');
 const mailCompose = require('../src/main/mail-compose');
 const tasksFeature = require('../src/main/tasks-feature');
 const docgen = require('../src/main/docgen');
+const translate = require('../src/main/translate');
 
 // 保存先を明示的に固定する（productNameが日本語でもフォルダ名を英字に保つため）
 app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
@@ -106,6 +107,7 @@ app.whenReady().then(() => {
   mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage });
   tasksFeature.register({ getSettings, getTasks, saveTasks, getUsage, saveUsage });
   docgen.register({ getSettings, getUsage, saveUsage });
+  translate.register({ getSettings, getUsage, saveUsage });
   createWindow();
 
   app.on('activate', () => {

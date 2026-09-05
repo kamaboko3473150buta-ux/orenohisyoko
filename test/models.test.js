@@ -9,11 +9,12 @@ test('MODELSに3つのモデルがある', () => {
   assert.deepStrictEqual(MODELS.map((m) => m.id), ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5']);
 });
 
-test('FEATURESに3つの機能があり、既定モデルを持つ', () => {
-  assert.strictEqual(FEATURES.length, 3);
+test('FEATURESに4つの機能があり、既定モデルを持つ', () => {
+  assert.strictEqual(FEATURES.length, 4);
   assert.strictEqual(findFeature('mail').defaultModel, 'claude-opus-5');
   assert.strictEqual(findFeature('task').defaultModel, 'claude-opus-5');
   assert.strictEqual(findFeature('docgen').defaultModel, 'claude-sonnet-5');
+  assert.strictEqual(findFeature('translate').defaultModel, 'claude-sonnet-5');
 });
 
 test('DEFAULT_MODEL_IDはOpus 5', () => {

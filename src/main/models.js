@@ -34,6 +34,8 @@ const FEATURES = [
   { id: 'mail', label: 'メール文面作成', defaultModel: 'claude-opus-5' },
   { id: 'task', label: 'タスクの取り込み・案内', defaultModel: 'claude-opus-5' },
   { id: 'docgen', label: '資料作成', defaultModel: 'claude-sonnet-5' },
+  // 翻訳はHaikuでも実用になる（要件どおり）ため、既定はSonnet 5にしつつ利用者が選べるようにする。
+  { id: 'translate', label: '言語翻訳', defaultModel: 'claude-sonnet-5' },
 ];
 
 // idで探す。見つからない（未知・未指定）ときはOpus 5を返す。

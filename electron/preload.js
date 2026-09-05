@@ -56,4 +56,12 @@ contextBridge.exposeInMainWorld('hishoko', {
   docSave: (args) => ipcRenderer.invoke('doc:save', args),
   // 添付の文字数からの概算費用。モデルを変えるたびに画面から呼び直す。
   docEstimate: (chars, modelId) => ipcRenderer.invoke('doc:estimate', { chars, modelId }),
+
+  // 言語翻訳
+  translateLanguages: () => ipcRenderer.invoke('translate:languages'),
+  translatePickFile: () => ipcRenderer.invoke('translate:pickFile'),
+  translateRead: (args) => ipcRenderer.invoke('translate:read', args),
+  translateEstimate: (args) => ipcRenderer.invoke('translate:estimate', args),
+  translateChunk: (args) => ipcRenderer.invoke('translate:translateChunk', args),
+  translateSave: (args) => ipcRenderer.invoke('translate:save', args),
 });
