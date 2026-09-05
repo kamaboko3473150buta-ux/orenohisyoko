@@ -246,8 +246,27 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 .actions {
   display: flex;
   gap: 8px;
+  align-items: center;
   justify-content: flex-end;
   margin-top: 14px;
+}
+
+/* --- 実行ボタンの横に置く、その回だけのモデル選択（Task 33） --- */
+/* 普段は意識せず使える大きさに留め、既存の色変数だけを使う（新しい色は増やさない）。 */
+.model-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.model-inline select {
+  width: auto;
+  padding: 3px 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  border-color: var(--line);
 }
 .error {
   color: var(--danger);

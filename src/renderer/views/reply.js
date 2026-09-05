@@ -7,10 +7,12 @@ Views.reply = {
     App.setTitle('返信文を作成');
     const meta = await window.hishoko.mailMeta();
     const settings = await window.hishoko.getSettings();
+    const modelMeta = await window.hishoko.modelsList();
 
     // 前回の入力があれば引き継ぐ（プレビューから戻ってきたとき）
     const f = App.state.replyForm || {
       toneId: settings.defaultTone,
+      model: settings.models.mail, // その回だけの上書き。設定は書き換えない
       received: '',
       memo: '',
     };
@@ -31,6 +33,15 @@ Views.reply = {
     const memo = App.h('input', { type: 'text', value: f.memo, placeholder: '例: 今回は断りたい／来週なら可能' });
     memo.addEventListener('input', () => { f.memo = memo.value; });
 
+    // モデル選択(その回だけの上書き。初期値は設定の既定で、選んでも設定自体は変わらない）
+    const modelSelect = App.h('select');
+    modelMeta.models.forEach((m) => {
+      const opt = App.h('option', { value: m.id, text: m.label });
+      if (f.model === m.id) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+    modelSelect.addEventListener('change', () => { f.model = modelSelect.value; });
+
     const errorEl = App.h('div', { class: 'error', hidden: true });
     const submit = App.h('button', { text: '返信文を作成する' });
 
@@ -39,7 +50,10 @@ Views.reply = {
       App.h('div', { class: 'field' }, [App.h('label', { text: '② 文体' }), tone]),
       App.h('div', { class: 'field' }, [App.h('label', { text: '③ 伝えたいこと（任意・空欄でよい）' }), memo]),
       errorEl,
-      App.h('div', { class: 'actions' }, [submit]),
+      App.h('div', { class: 'actions' }, [
+        App.h('div', { class: 'model-inline' }, [App.h('span', { text: 'モデル' }), modelSelect]),
+        submit,
+      ]),
     ]));
 
     submit.addEventListener('click', async () => {
@@ -57,7 +71,7 @@ Views.reply = {
       Hishoko.say('thinking', '文面を考えています…');
 
       const res = await window.hishoko.mailGenerateReply({
-        toneId: f.toneId, received: f.received, memo: f.memo,
+        toneId: f.toneId, received: f.received, memo: f.memo, model: f.model,
       });
 
       submit.disabled = false;

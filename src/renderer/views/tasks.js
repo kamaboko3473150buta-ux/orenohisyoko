@@ -8,8 +8,23 @@ Views.tasks = {
     App.setTitle('タスク・スケジュール管理');
 
     const settings = await window.hishoko.getSettings();
+    const modelMeta = await window.hishoko.modelsList();
     let inputMode = settings.defaultTaskInput === 'ai' ? 'ai' : 'manual';
     let doneOpen = false; // 完了したものの折りたたみ。既定は閉じる（localStorageには保存しない）
+
+    // モデル選択(その回だけの上書き)を作る小さな部品。AI取り込み・今日の進め方相談の
+    // どちらも「タスク機能」の既定モデル（settings.models.task）を初期値にする。
+    function buildModelSelect() {
+      const select = App.h('select');
+      modelMeta.models.forEach((m) => {
+        const opt = App.h('option', { value: m.id, text: m.label });
+        if (settings.models.task === m.id) opt.selected = true;
+        select.appendChild(opt);
+      });
+      return select;
+    }
+    const parseModelSelect = buildModelSelect();
+    const briefModelSelect = buildModelSelect();
 
     // --- ① 追加欄 ---
     const lineInput = App.h('input', {
@@ -28,14 +43,22 @@ Views.tasks = {
       inputMode = mode;
       radioAi.checked = mode === 'ai';
       radioManual.checked = mode === 'manual';
+      parseModelField.hidden = mode !== 'ai';
       window.hishoko.saveSettings({ defaultTaskInput: mode });
     };
     radioAi.addEventListener('change', () => setMode('ai'));
     radioManual.addEventListener('change', () => setMode('manual'));
 
+    // AIで取り込むときだけ意味を持つので、そのときだけ見えるようにする
+    // （手入力のときにモデル選択が目に入って邪魔にならないように）。
+    const parseModelField = App.h('div', { class: 'model-inline', hidden: inputMode !== 'ai' }, [
+      App.h('span', { text: 'モデル' }), parseModelSelect,
+    ]);
+
     const radioRow = App.h('div', { class: 'radio-row' }, [
       App.h('span', {}, [radioAi, App.h('label', { for: 'taskInputAi', text: 'AIで取り込む' })]),
       App.h('span', {}, [radioManual, App.h('label', { for: 'taskInputManual', text: '手で入力する' })]),
+      parseModelField,
     ]);
 
     root.appendChild(App.h('div', { class: 'card' }, [
@@ -164,7 +187,7 @@ Views.tasks = {
       if (inputMode === 'ai') {
         addBtn.disabled = true;
         addBtn.textContent = '取り込み中…（数秒かかります）';
-        const res = await window.hishoko.taskParse({ text });
+        const res = await window.hishoko.taskParse({ text, model: parseModelSelect.value });
         addBtn.disabled = false;
         addBtn.textContent = '追加';
 
@@ -191,7 +214,7 @@ Views.tasks = {
       briefBtn.textContent = '相談中…（数秒かかります）';
       briefResult.hidden = true;
 
-      const res = await window.hishoko.taskBrief();
+      const res = await window.hishoko.taskBrief({ model: briefModelSelect.value });
 
       briefBtn.disabled = false;
       briefBtn.textContent = '今日の進め方を相談する';
@@ -204,7 +227,10 @@ Views.tasks = {
 
     root.appendChild(App.h('div', { class: 'card' }, [
       briefResult,
-      App.h('div', { class: 'actions' }, [briefBtn]),
+      App.h('div', { class: 'actions' }, [
+        App.h('div', { class: 'model-inline' }, [App.h('span', { text: 'モデル' }), briefModelSelect]),
+        briefBtn,
+      ]),
     ]));
 
     // --- 一覧 ---

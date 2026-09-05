@@ -7,12 +7,14 @@ Views.compose = {
     const meta = await window.hishoko.mailMeta();
     const settings = await window.hishoko.getSettings();
     const book = await window.hishoko.bookGet();
+    const modelMeta = await window.hishoko.modelsList();
 
     // 前回の入力があれば引き継ぐ（プレビューから戻ってきたとき）
     const f = App.state.form || {
       sceneId: 'thanks',
       toneId: settings.defaultTone,
       mailer: settings.defaultMailer,
+      model: settings.models.mail, // その回だけの上書き。設定は書き換えない
       recipients: [], // { company, department, name, honorific, email, field: 'to'|'cc'|'bcc' } の配列
       subject: '',
       memo: '',
@@ -244,6 +246,15 @@ Views.compose = {
     });
     mailer.addEventListener('change', () => { f.mailer = mailer.value; });
 
+    // モデル選択（その回だけの上書き。初期値は設定の既定で、選んでも設定自体は変わらない）
+    const modelSelect = App.h('select');
+    modelMeta.models.forEach((m) => {
+      const opt = App.h('option', { value: m.id, text: m.label });
+      if (f.model === m.id) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+    modelSelect.addEventListener('change', () => { f.model = modelSelect.value; });
+
     const errorEl = App.h('div', { class: 'error', hidden: true });
     const submit = App.h('button', { text: '文面を作成する' });
 
@@ -255,7 +266,10 @@ Views.compose = {
         App.h('div', { class: 'field' }, [App.h('label', { text: '⑥ 送信先' }), mailer]),
       ]),
       errorEl,
-      App.h('div', { class: 'actions' }, [submit]),
+      App.h('div', { class: 'actions' }, [
+        App.h('div', { class: 'model-inline' }, [App.h('span', { text: 'モデル' }), modelSelect]),
+        submit,
+      ]),
     ]));
 
     submit.addEventListener('click', async () => {
@@ -279,7 +293,7 @@ Views.compose = {
 
       const res = await window.hishoko.mailGenerate({
         sceneId: f.sceneId, toneId: f.toneId, recipients: f.recipients,
-        subject: f.subject, memo: f.memo,
+        subject: f.subject, memo: f.memo, model: f.model,
       });
 
       submit.disabled = false;
