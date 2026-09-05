@@ -1,6 +1,6 @@
 {
   "name": "ore-no-hishoko",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "汎用業務能率化アプリ。第1機能はClaude APIによるメール文面作成。",
   "main": "electron/main.js",
   "scripts": {
