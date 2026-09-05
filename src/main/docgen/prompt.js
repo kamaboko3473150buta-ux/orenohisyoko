@@ -58,6 +58,47 @@ function sanitizeString(v) {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+// 表のセル1個分を文字列にする。文字列はそのまま、数値（件数・金額など）は文字列化して
+// 残す。それ以外の型（null・オブジェクト等）は空文字にする（sanitizeStringArrayが
+// 要素ごと捨てるのとは違い、tableは列数を保つ必要があるためセルは空文字に倒すだけにする）。
+function sanitizeTableCell(v) {
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return '';
+}
+
+// { headers, rows } を正規化する。headersが1列も無い・rowsが配列でない・行が配列でない
+// ・列数がheadersと合わない行はすべて捨てる（表として描けない形は無かったことにする）。
+// 有効な行が1つも残らなければ、表自体を出す意味が無いのでnullにする。
+function sanitizeTable(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const headers = sanitizeStringArray(v.headers);
+  if (!headers.length) return null;
+  const rawRows = Array.isArray(v.rows) ? v.rows : [];
+  const rows = [];
+  for (const row of rawRows) {
+    if (!Array.isArray(row) || row.length !== headers.length) continue;
+    rows.push(row.map(sanitizeTableCell));
+  }
+  if (!rows.length) return null;
+  return { headers, rows };
+}
+
+// meta（{label, value}の一覧）の1件分を正規化する。オブジェクトでなければ捨てる。
+// labelもvalueも空になる要素は、出す意味が無いので捨てる。
+function sanitizeMetaItem(m) {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+  const label = sanitizeString(m.label);
+  const value = sanitizeString(m.value);
+  if (!label && !value) return null;
+  return { label, value };
+}
+
+function sanitizeMeta(v) {
+  if (!Array.isArray(v)) return [];
+  return v.map(sanitizeMetaItem).filter((m) => m !== null);
+}
+
 // ---- 構成案 ----
 
 // system は構成案と本文で**まったく同じ**にする。
@@ -174,7 +215,14 @@ function buildBodyUserPrompt({ typeId, brief, sources, outline, today } = {}) {
     formatSources(sources),
     '',
     '【この依頼で出す JSON の形】',
-    '{ "title": "資料の題名", "sections": [ { "heading": "見出し", "paragraphs": ["段落1"], "bullets": ["箇条書き1"] } ] }',
+    '{ "title": "資料の題名",',
+    '  "meta": [ { "label": "項目名", "value": "内容" } ],',
+    '  "sections": [ { "heading": "見出し", "paragraphs": ["段落1"], "bullets": ["箇条書き1"],',
+    '    "table": { "headers": ["列見出し1", "列見出し2"], "rows": [ ["値1", "値2"] ] } } ] }',
+    'meta は「この資料の種類の作法」で指定された項目（日時・場所・出席者、発信日・宛先・発信者・件名など）'
+      + 'だけを入れる。指定が無い種類では空配列 [] にする。',
+    'table は宿題・連絡先・数値の一覧など、表にしたほうが分かりやすい内容がある場合だけ使う。'
+      + '不要なセクションでは table を省略してよい。',
     '',
     '確定した構成の見出しの並びと数を守り、指定が無い見出しを勝手に増やさないでください。',
     '上記の構成に沿って、本文をJSONのみで出力してください。',
@@ -187,6 +235,7 @@ function sanitizeBodySection(s) {
     heading: sanitizeString(s.heading),
     paragraphs: sanitizeStringArray(s.paragraphs),
     bullets: sanitizeStringArray(s.bullets),
+    table: sanitizeTable(s.table),
   };
 }
 
@@ -196,17 +245,18 @@ function sanitizeBodySections(v) {
 }
 
 function emptyDoc() {
-  return { title: '', sections: [] };
+  return { title: '', meta: [], sections: [] };
 }
 
-// Claudeの応答から本文（4-4dの中間形式）を取り出す。構成案と同じく、失敗しても
-// 例外は投げず、空の中間形式を failed:true とともに返す。
+// Claudeの応答から本文（4-4dの中間形式。Task 41でmeta・tableを追加）を取り出す。
+// 構成案と同じく、失敗しても例外は投げず、空の中間形式を failed:true とともに返す。
 function parseBodyJson(raw) {
   const obj = parseJsonSafely(raw);
   if (!obj) return { doc: emptyDoc(), failed: true };
   return {
     doc: {
       title: sanitizeString(obj.title),
+      meta: sanitizeMeta(obj.meta),
       sections: sanitizeBodySections(obj.sections),
     },
     failed: false,

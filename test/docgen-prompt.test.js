@@ -135,6 +135,45 @@ test('本文user: 参考資料0件・構成案なしでも壊れない', () => {
   assert.doesNotThrow(() => buildBodyUserPrompt({ typeId: 'report' }));
 });
 
+test('本文user: 出力するJSONの形にmetaとtableが含まれる（Task 41）', () => {
+  const u = buildBodyUserPrompt({ typeId: 'minutes', brief: '', sources: [], outline: null, today: '2026-09-05' });
+  assert.ok(u.includes('"meta"'), 'JSON例にmetaが含まれる');
+  assert.ok(u.includes('"table"'), 'JSON例にtableが含まれる');
+  assert.ok(u.includes('headers'), 'JSON例にheadersが含まれる');
+  assert.ok(u.includes('rows'), 'JSON例にrowsが含まれる');
+});
+
+// ---- 種類ごとのguide（Task 41: 種類ごとの雛形） ----
+
+test('議事録のguide: meta（日時・場所・出席者）と宿題の表を指示する', () => {
+  const s = buildBodySystemPrompt('minutes');
+  assert.ok(s.includes('日時') && s.includes('場所') && s.includes('出席者'), 'meta項目の指示がある');
+  assert.ok(s.includes('宿題'), '宿題の見出しを立てる指示がある');
+  assert.ok(s.includes('table') || s.includes('表'), '表にする指示がある');
+});
+
+test('報告書のguide: 結論→根拠の順と、数値は表にする指示がある', () => {
+  const s = buildBodySystemPrompt('report');
+  assert.ok(s.includes('結論'));
+  assert.ok(s.includes('根拠'));
+  assert.ok(s.includes('table') || s.includes('表'));
+});
+
+test('社内文書のguide: metaの発信日・宛先・発信者・件名と「記」書きの指示がある', () => {
+  const s = buildBodySystemPrompt('internal');
+  assert.ok(s.includes('発信日') && s.includes('宛先') && s.includes('発信者') && s.includes('件名'));
+  assert.ok(s.includes('記'));
+});
+
+test('引継ぎ資料のguide: 5つの見出しと、手順の番号付き・連絡先の表の指示がある', () => {
+  const s = buildBodySystemPrompt('handover');
+  for (const h of ['業務の概要', '手順', '注意点', '連絡先', 'よくあるトラブル']) {
+    assert.ok(s.includes(h), `${h}の見出し指示がある`);
+  }
+  assert.ok(s.includes('番号'));
+  assert.ok(s.includes('table') || s.includes('表'));
+});
+
 test('parseBodyJson: 素のJSONを解析できる（4-4d形式）', () => {
   const raw = JSON.stringify({
     title: '第9回定例会議 議事録',
@@ -163,7 +202,7 @@ test('parseBodyJson: 壊れたJSON・配列・nullで例外を投げずfailed:tr
   assert.strictEqual(parseBodyJson('null').failed, true);
   assert.strictEqual(parseBodyJson('').failed, true);
   assert.strictEqual(parseBodyJson(undefined).failed, true);
-  assert.deepStrictEqual(parseBodyJson('').doc, { title: '', sections: [] });
+  assert.deepStrictEqual(parseBodyJson('').doc, { title: '', meta: [], sections: [] });
 });
 
 test('parseBodyJson: sectionsが配列でない・bulletsが文字列・paragraphsに数値混入を捨てる', () => {
@@ -171,8 +210,123 @@ test('parseBodyJson: sectionsが配列でない・bulletsが文字列・paragrap
   assert.deepStrictEqual(parseBodyJson(raw1).doc.sections, []);
 
   const raw2 = JSON.stringify({ title: 'X', sections: [{ heading: '見出し', paragraphs: ['正常'], bullets: '文字列です' }] });
-  assert.deepStrictEqual(parseBodyJson(raw2).doc.sections, [{ heading: '見出し', paragraphs: ['正常'], bullets: [] }]);
+  assert.deepStrictEqual(parseBodyJson(raw2).doc.sections, [{
+    heading: '見出し', paragraphs: ['正常'], bullets: [], table: null,
+  }]);
 
   const raw3 = JSON.stringify({ title: 'X', sections: [{ heading: '見出し', paragraphs: ['正常', 123, null, '正常2'], bullets: [] }] });
   assert.deepStrictEqual(parseBodyJson(raw3).doc.sections[0].paragraphs, ['正常', '正常2']);
+});
+
+// ---- meta（Task 41） ----
+
+test('parseBodyJson: metaを正規化する（label・valueの文字列配列）', () => {
+  const raw = JSON.stringify({
+    title: '第9回定例会議 議事録',
+    meta: [
+      { label: '日時', value: '2026年9月3日(水) 14:00〜15:00' },
+      { label: '場所', value: '第2会議室' },
+      { label: '出席者', value: '田中・佐藤・鈴木' },
+    ],
+    sections: [],
+  });
+  const { doc } = parseBodyJson(raw);
+  assert.deepStrictEqual(doc.meta, [
+    { label: '日時', value: '2026年9月3日(水) 14:00〜15:00' },
+    { label: '場所', value: '第2会議室' },
+    { label: '出席者', value: '田中・佐藤・鈴木' },
+  ]);
+});
+
+test('parseBodyJson: metaが配列でない・要素がオブジェクトでない・label/valueが型違いでも落ちずに捨てる', () => {
+  assert.deepStrictEqual(parseBodyJson(JSON.stringify({ title: 'X', meta: '配列じゃない', sections: [] })).doc.meta, []);
+  assert.deepStrictEqual(
+    parseBodyJson(JSON.stringify({ title: 'X', meta: ['文字列', null, 123], sections: [] })).doc.meta,
+    [],
+  );
+  assert.deepStrictEqual(
+    parseBodyJson(JSON.stringify({ title: 'X', meta: [{ label: 123, value: null }], sections: [] })).doc.meta,
+    [],
+    'labelもvalueも空になる要素は捨てる',
+  );
+  assert.deepStrictEqual(
+    parseBodyJson(JSON.stringify({ title: 'X', meta: [{ label: '日時' }], sections: [] })).doc.meta,
+    [{ label: '日時', value: '' }],
+    'valueが無くてもlabelがあれば残す',
+  );
+});
+
+test('parseBodyJson: metaが無い応答でも空配列になる（既存呼び出しとの互換）', () => {
+  const { doc } = parseBodyJson(JSON.stringify({ title: 'X', sections: [] }));
+  assert.deepStrictEqual(doc.meta, []);
+});
+
+// ---- table（Task 41） ----
+
+test('parseBodyJson: セクションのtableを正規化する（headers・rows）', () => {
+  const raw = JSON.stringify({
+    title: 'X',
+    sections: [{
+      heading: '宿題',
+      paragraphs: [],
+      bullets: [],
+      table: { headers: ['項目', '担当', '期限'], rows: [['議事録配布', '田中', '9/10'], ['資料作成', '鈴木', '9/12']] },
+    }],
+  });
+  const { doc } = parseBodyJson(raw);
+  assert.deepStrictEqual(doc.sections[0].table, {
+    headers: ['項目', '担当', '期限'],
+    rows: [['議事録配布', '田中', '9/10'], ['資料作成', '鈴木', '9/12']],
+  });
+});
+
+test('parseBodyJson: tableの列数が合わない行は捨て、合う行だけ残す', () => {
+  const raw = JSON.stringify({
+    title: 'X',
+    sections: [{
+      heading: '宿題',
+      table: {
+        headers: ['項目', '担当', '期限'],
+        rows: [
+          ['正しい行', '田中', '9/10'],
+          ['列が足りない行', '鈴木'],
+          ['列が多い行', '佐藤', '9/12', '余計な列'],
+        ],
+      },
+    }],
+  });
+  const { doc } = parseBodyJson(raw);
+  assert.deepStrictEqual(doc.sections[0].table.rows, [['正しい行', '田中', '9/10']]);
+});
+
+test('parseBodyJson: tableが文字列・配列・rowsが配列でない等の型違いでも落ちずnullになる', () => {
+  const cases = [
+    { headers: ['a'], rows: 'not-an-array' },
+    { headers: 'not-an-array', rows: [['x']] },
+    { headers: [], rows: [['x']] },
+    '文字列です',
+    123,
+    ['配列です'],
+    null,
+  ];
+  for (const table of cases) {
+    const raw = JSON.stringify({ title: 'X', sections: [{ heading: 'H', table }] });
+    const { doc } = parseBodyJson(raw);
+    assert.strictEqual(doc.sections[0].table, null, `table=${JSON.stringify(table)} はnullになる`);
+  }
+});
+
+test('parseBodyJson: tableのセル値に数値が混ざっていても文字列化して残す', () => {
+  const raw = JSON.stringify({
+    title: 'X',
+    sections: [{ heading: 'H', table: { headers: ['項目', '件数'], rows: [['A', 3]] } }],
+  });
+  const { doc } = parseBodyJson(raw);
+  assert.deepStrictEqual(doc.sections[0].table.rows, [['A', '3']]);
+});
+
+test('parseBodyJson: tableが無いセクションはtable:nullになる（既存呼び出しとの互換）', () => {
+  const raw = JSON.stringify({ title: 'X', sections: [{ heading: 'H', paragraphs: ['p'], bullets: [] }] });
+  const { doc } = parseBodyJson(raw);
+  assert.strictEqual(doc.sections[0].table, null);
 });
