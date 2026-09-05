@@ -34,7 +34,11 @@ window.Hishoko = (function () {
   }
 
   function paintBubbleVisibility() {
-    bubble.hidden = collapsed || !hasText;
+    const visible = !collapsed && hasText;
+    bubble.hidden = !visible;
+    // 吹き出しが出ている間は本文側に右余白を作り、入力欄や一覧に重ならないようにする
+    // （右下の空きスペースを使う。画面が狭いときはCSS側で余白を付けない）。
+    document.body.classList.toggle('hishoko-open', visible);
   }
 
   function build() {

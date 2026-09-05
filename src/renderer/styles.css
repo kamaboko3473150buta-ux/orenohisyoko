@@ -415,34 +415,41 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-width: min(340px, calc(100vw - 40px));
+  max-width: min(330px, calc(100vw - 40px));
+}
+
+/* 吹き出しが出ている間だけ、本文の右に居場所を空ける。
+   画面が狭いときは詰めても仕方がないので、広いときだけにする。 */
+@media (min-width: 1000px) {
+  body.hishoko-open main { padding-right: 372px; }
 }
 
 .hishoko-bubble {
   position: relative;
   background: var(--panel);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-shadow: 0 4px 14px rgba(22, 48, 43, .12);
-  /* 「今日の進め方」の答えのような長い文章も読めるようにする */
-  max-height: 46vh;
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 6px 20px rgba(22, 48, 43, .16);
+  /* 「今日の進め方」の答えのような長い文章も、たいていは
+     スクロールせずに読み切れる高さを確保する */
+  max-height: 62vh;
   overflow-y: auto;
 }
 .hishoko-bubble p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 13.5px;
+  line-height: 1.8;
   color: var(--text);
   white-space: pre-wrap;
 }
 .hishoko-bubble::after {
   content: "";
   position: absolute;
-  right: 60px;
-  bottom: -7px;
-  width: 12px;
-  height: 12px;
+  right: 56px;
+  bottom: -9px;
+  width: 16px;
+  height: 16px;
   background: var(--panel);
   border-right: 1px solid var(--line-strong);
   border-bottom: 1px solid var(--line-strong);
