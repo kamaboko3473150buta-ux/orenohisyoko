@@ -31,6 +31,14 @@ const BODY_OUTPUT_TOKENS = 5000;
 // プロンプトの指示文そのものの分（種類ごとの作法・出力形式の指定など）。
 const PROMPT_OVERHEAD_TOKENS = 600;
 
+// API に渡す出力の上限。上の見積もり値とは役割が違うので分けている。
+// 見積もりは「ふつうこのくらい」の値、上限は「ここまでは出してよい」の値。
+// 上限を見積もり値に合わせると、長い資料のときに途中で切れてJSONが壊れ、
+// 料金を払ったのに何も残らない。切れるくらいなら多少高くつくほうがましなので、
+// 上限は余裕を持たせる。
+const OUTLINE_MAX_TOKENS = 4000;
+const BODY_MAX_TOKENS = 16000;
+
 // 構成案・本文の2回のAPI呼び出し分の概算費用（円）。
 // 参考資料は2回とも丸ごと送るので、入力は毎回かかる。
 // 本文の回は、確定した構成案も一緒に送る分を足す。
@@ -56,5 +64,6 @@ function needsConfirm(chars) {
 
 module.exports = {
   CONFIRM_CHARS, OUTLINE_OUTPUT_TOKENS, BODY_OUTPUT_TOKENS, PROMPT_OVERHEAD_TOKENS,
+  OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS,
   estimateTokens, estimateYen, needsConfirm,
 };

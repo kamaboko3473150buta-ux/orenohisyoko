@@ -10,7 +10,7 @@ const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
 } = require('./prompt');
-const { OUTLINE_OUTPUT_TOKENS, BODY_OUTPUT_TOKENS } = require('./estimate');
+const { OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS } = require('./estimate');
 const { writeDocx, writePdf } = require('./writers');
 const { generateText } = require('../claude');
 const { addUsage } = require('../usage');
@@ -70,7 +70,7 @@ function register({ getSettings, getUsage, saveUsage }) {
       user: buildOutlineUserPrompt({
         typeId, brief, sources, today: todayYmd(),
       }),
-      maxTokens: OUTLINE_OUTPUT_TOKENS,
+      maxTokens: OUTLINE_MAX_TOKENS,
       // 画面で選んだモデル（その回だけの上書き）。未指定なら設定の既定（資料作成）を使う。
       model: model || settings.models.docgen,
     });
@@ -92,7 +92,7 @@ function register({ getSettings, getUsage, saveUsage }) {
       user: buildBodyUserPrompt({
         typeId, brief, sources, outline, today: todayYmd(),
       }),
-      maxTokens: BODY_OUTPUT_TOKENS,
+      maxTokens: BODY_MAX_TOKENS,
       model: model || settings.models.docgen,
     });
     if (!result.ok) return result;
