@@ -294,13 +294,14 @@ Views.tasks = {
 
       // 今日が期間内（inProgress）のものには「進行中」の印を付ける
       // （終了日が先でも、今日動いているものを見落とさないため）。
-      const titleText = t.inProgress
-        ? `【進行中】${t.title || '(無題)'}`
-        : (t.title || '(無題)');
+      const title = App.h('span', { class: 'task-title' }, [
+        t.inProgress ? App.h('span', { class: 'task-badge', text: '進行中' }) : null,
+        App.h('span', { text: t.title || '(無題)' }),
+      ]);
 
       const row = App.h('div', { class: rowClass.join(' ') }, [
         checkbox,
-        App.h('span', { class: 'task-title', text: titleText }),
+        title,
         App.h('span', { class: 'task-meta', text: formatMeta(t) }),
       ]);
       row.addEventListener('click', () => openForm(t, { existingId: t.id }));

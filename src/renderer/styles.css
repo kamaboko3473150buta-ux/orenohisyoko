@@ -348,6 +348,19 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 .task-overdue .task-title, .task-overdue .task-meta { color: var(--danger); }
 .task-today .task-title { font-weight: 600; }
 
+/* 今日が期間内のタスクの印。終了日が先でも今日動いているものを見落とさないため */
+.task-badge {
+  display: inline-block;
+  background: var(--accent-weak);
+  color: var(--accent-hover);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
 /* --- 資料作成: 参考資料の添付一覧 --- */
 
 .attach-list { margin-top: 8px; }
