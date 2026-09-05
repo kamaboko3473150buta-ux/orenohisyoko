@@ -26,6 +26,10 @@ Views.menu = {
       App.h('h2', { text: '🗂 タスク・スケジュール管理' }),
       App.h('p', { text: '予定とやることを1つにまとめ、今日やるべきことを案内します' }),
     ]));
+    root.appendChild(App.h('div', { class: 'card clickable', onclick: () => App.go('docgen') }, [
+      App.h('h2', { text: '📄 資料作成' }),
+      App.h('p', { text: 'プレゼン・レポート・議事録などを構成案から仕上げ、Word/PDFで書き出します' }),
+    ]));
     root.appendChild(App.h('div', { class: 'card' }, [
       App.h('h2', { text: '＋ 今後の機能' }),
       App.h('p', { text: '新しい機能はここに追加されます' }),

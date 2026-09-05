@@ -348,6 +348,49 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 .task-overdue .task-title, .task-overdue .task-meta { color: var(--danger); }
 .task-today .task-title { font-weight: 600; }
 
+/* --- 資料作成: 参考資料の添付一覧 --- */
+
+.attach-list { margin-top: 8px; }
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.attach-row:last-child { border-bottom: none; }
+.attach-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-chars { color: var(--muted); flex: 0 0 auto; white-space: nowrap; }
+.attach-error { color: var(--danger); flex: 1 1 auto; }
+.attach-remove {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* --- 資料作成: 構成案の編集 --- */
+
+.outline-sections, .doc-sections { margin-top: 4px; }
+.outline-section, .doc-section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.outline-section-row, .doc-section-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.outline-section-row input[type="text"], .doc-section-row input[type="text"] { flex: 1; min-width: 0; }
+.outline-points {
+  margin-top: 6px;
+  white-space: pre-wrap;
+}
+.doc-paragraphs, .doc-bullets { min-height: 96px; }
+
 /* --- 秘書子の吹き出し（全画面共通） --- */
 
 .hishoko-widget {
