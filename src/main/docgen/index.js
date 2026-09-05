@@ -99,14 +99,17 @@ function register({ getSettings, getUsage, saveUsage }) {
     return { ok: true };
   });
 
-  ipcMain.handle('doc:readFiles', async (_e, { filePaths } = {}) => {
+  ipcMain.handle('doc:readFiles', async (_e, { filePaths, typeId } = {}) => {
     const results = await readFiles(filePaths);
 
-    // 添付からプレゼン用の画像を抽出する（Task 35/38）。読み取り自体は種類を問わず
-    // 毎回行うが、実際に使うのはプレゼン資料のときだけ。1回のdoc:readFiles呼び出しごとに
+    // 添付からプレゼン用の画像を抽出する（Task 35/38）。
+    // 使うのはプレゼン資料のときだけなので、それ以外では抽出しない
+    // （他人の資料の画像を必要も無いのに一時フォルダへ書き出さないため）。
+    // 1回のdoc:readFiles呼び出しごとに
     // 専用の一時フォルダを1つ作り、そのフォルダをセッションに積み増していく
     // （画面は複数回に分けて添付を追加できるため、既に抽出済みの分は残したまま追加する）。
     try {
+      if (typeId !== 'presentation') return { results, imageCount: 0 };
       const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hishoko-docgen-img-'));
       const extracted = await extractImages(filePaths, outDir);
       if (extracted.length) {
@@ -216,11 +219,11 @@ function register({ getSettings, getUsage, saveUsage }) {
         code: 'write_failed',
         message: `保存に失敗しました（${(err && err.message) || err}）`,
       };
-    } finally {
-      // 保存が終わったら（失敗しても）、抽出しておいた画像と一時フォルダを必ず消す。
-      // 他人の資料から取り出した画像をいつまでも残さないため。
-      await cleanupImageSession();
     }
+    // ここで画像を消さないのは意図的。別の形式でもう一度保存したいことがあり、
+    // 消してしまうと2回目の保存で画像入りのスライドが崩れる。
+    // 後始末は「新しい資料を作り始めたとき（doc:resetImages）」と
+    // 「アプリ終了時（cleanupOnQuit）」で行う。
   });
 }
 

@@ -163,7 +163,7 @@ Views.docgen = {
         if (!filePaths || !filePaths.length) return; // キャンセルなら何もしない
         pickBtn.disabled = true;
         pickBtn.textContent = '読み取り中…';
-        const { results, imageCount } = await window.hishoko.docReadFiles({ filePaths });
+        const { results, imageCount } = await window.hishoko.docReadFiles({ filePaths, typeId: state.typeId });
         pickBtn.disabled = false;
         pickBtn.textContent = 'ファイルを選ぶ';
         state.attachments = state.attachments.concat(results);
