@@ -99,6 +99,50 @@ function sanitizeMeta(v) {
   return v.map(sanitizeMetaItem).filter((m) => m !== null);
 }
 
+// ---- グラフ（Task 43） ----
+//
+// AIが作った数値をそのまま信じない。1系列分（{name, values}）を正規化する。
+// values が配列でない・labelsと長さが合わない・数値でない要素が1つでも混ざっている場合は、
+// その系列全体を捨てる（nullを返す）。値だけ0に倒す・欠けた分だけ削るといった中途半端な
+// 救済はしない——長さの合わないグラフや、値をこっそり書き換えたグラフは、意味の違う図に
+// なってしまうため。
+const CHART_TYPES = ['bar', 'line', 'pie'];
+
+function sanitizeChartSeries(v, expectedLength) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const name = sanitizeString(v.name);
+  const rawValues = Array.isArray(v.values) ? v.values : null;
+  if (!rawValues || rawValues.length !== expectedLength) return null;
+  const values = [];
+  for (const n of rawValues) {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+    values.push(n);
+  }
+  return { name, values };
+}
+
+// { type, title, labels, series } を正規化する。type が3種以外なら bar に倒す。
+// labels が1つも無い、または有効な系列が1つも残らない場合は、グラフを出す意味が
+// 無いので chart 自体を null にする。例外は投げない。
+function sanitizeChart(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const rawType = typeof v.type === 'string' ? v.type : '';
+  const type = CHART_TYPES.includes(rawType) ? rawType : 'bar';
+  const title = sanitizeString(v.title);
+  const labels = sanitizeStringArray(v.labels);
+  if (!labels.length) return null;
+  const rawSeries = Array.isArray(v.series) ? v.series : [];
+  const series = [];
+  for (const s of rawSeries) {
+    const sane = sanitizeChartSeries(s, labels.length);
+    if (sane) series.push(sane);
+  }
+  if (!series.length) return null;
+  return {
+    type, title, labels, series,
+  };
+}
+
 // ---- 構成案 ----
 
 // system は構成案と本文で**まったく同じ**にする。
@@ -218,11 +262,17 @@ function buildBodyUserPrompt({ typeId, brief, sources, outline, today } = {}) {
     '{ "title": "資料の題名",',
     '  "meta": [ { "label": "項目名", "value": "内容" } ],',
     '  "sections": [ { "heading": "見出し", "paragraphs": ["段落1"], "bullets": ["箇条書き1"],',
-    '    "table": { "headers": ["列見出し1", "列見出し2"], "rows": [ ["値1", "値2"] ] } } ] }',
+    '    "table": { "headers": ["列見出し1", "列見出し2"], "rows": [ ["値1", "値2"] ] },',
+    '    "chart": { "type": "bar|line|pie", "title": "グラフの題名",',
+    '      "labels": ["1月", "2月"], "series": [ { "name": "売上", "values": [120, 150] } ] } } ] }',
     'meta は「この資料の種類の作法」で指定された項目（日時・場所・出席者、発信日・宛先・発信者・件名など）'
       + 'だけを入れる。指定が無い種類では空配列 [] にする。',
     'table は宿題・連絡先・数値の一覧など、表にしたほうが分かりやすい内容がある場合だけ使う。'
       + '不要なセクションでは table を省略してよい。',
+    'chart は数値の比較・推移・内訳があるセクションにだけ付ける（無ければ省略してよい）。'
+      + '比較は棒グラフ（bar）、時系列の推移は折れ線グラフ（line）、全体に対する内訳は円グラフ（pie）にする。'
+      + 'labels の数と、各 series の values の数は必ず同じにする。'
+      + '参考資料に書かれていない数値を作ってはいけない。',
     '',
     '確定した構成の見出しの並びと数を守り、指定が無い見出しを勝手に増やさないでください。',
     '上記の構成に沿って、本文をJSONのみで出力してください。',
@@ -236,6 +286,7 @@ function sanitizeBodySection(s) {
     paragraphs: sanitizeStringArray(s.paragraphs),
     bullets: sanitizeStringArray(s.bullets),
     table: sanitizeTable(s.table),
+    chart: sanitizeChart(s.chart),
   };
 }
 
@@ -272,7 +323,7 @@ function parseBodyJson(raw) {
 // { title, subtitle, slides:[...] } を出力させ、同じ parseDeckJson で受け取る
 // （構成案の段階ではbullets/noteは空でよいとし、本文の段階で中身を仕上げさせる）。
 
-const SLIDE_LAYOUTS = ['title', 'statement', 'bullets', 'compare', 'image', 'closing'];
+const SLIDE_LAYOUTS = ['title', 'statement', 'bullets', 'compare', 'image', 'chart', 'closing'];
 const MAX_SLIDE_BULLETS = 5;
 
 // 使える画像の枚数を、AIへの指示文にする。0枚のときは「wantsImageを使わない」と
@@ -328,12 +379,14 @@ function buildSlideSystemPrompt() {
     '  悪い例: 「入力業務の課題」　良い例: 「現場の入力に月40時間かかっている」',
     '- 箇条書きは1スライド最大5行、1行30字以内。文章を書かない。',
     '  説明・背景・話す内容は note（スピーカーノート）に書き、スライド本体には置かない。',
-    `- レイアウトは6種類（${SLIDE_LAYOUTS.join(' / ')}）を使い分け、`,
+    `- レイアウトは${SLIDE_LAYOUTS.length}種類（${SLIDE_LAYOUTS.join(' / ')}）を使い分け、`,
     '  bullets を2枚以上連続させない。数字や結論を強く伝えたいスライドは statement、',
     '  2つを比べるスライドは compare にする。',
     '- 資料の最初の1枚は layout:"title"（表紙）、最後の1枚は layout:"closing"（まとめ・次の一歩）にする。',
     '- wantsImage は図を見せたいスライドにだけ true を付ける。どの画像を使うかは考えなくてよい'
       + '（画像の中身は見せていないので、選ぶのはアプリ側の役目）。',
+    '- 数値の比較・推移・内訳を見せたいスライドは layout:"chart" にする。'
+      + '参考資料に無い数値を作ってはいけない。',
     '',
     '出力のきまり:',
     '- 出力は JSON のみ。前置き・説明・コードフェンス（```）は一切書かない。',
@@ -401,8 +454,13 @@ function buildSlideBodyUserPrompt({ brief, sources, outline, imageCount } = {}) 
       + '"left": { "heading": "左の見出し", "bullets": ["…"] }, '
       + '"right": { "heading": "右の見出し", "bullets": ["…"] }, "note": "…" },',
     '  { "layout": "image", "heading": "見出し", "lead": "補足を一言だけ", "wantsImage": true, "note": "…" },',
+    '  { "layout": "chart", "heading": "見出し", "note": "…",',
+    '    "chart": { "type": "bar|line|pie", "title": "グラフの題名",',
+    '      "labels": ["1月", "2月"], "series": [ { "name": "売上", "values": [120, 150] } ] } },',
     '  { "layout": "closing", "heading": "まとめ", "bullets": ["次の一歩など最大5行"], "note": "…" }',
     '] }',
+    'chart の labels の数と、各 series の values の数は必ず同じにする。'
+      + '参考資料に無い数値を作ってはいけない。',
     '確定した構成のスライド枚数・順番・レイアウトを守り、勝手に増減しないでください。',
     '',
     '上記の構成に沿って、スライドの中身をJSONのみで出力してください。',
@@ -460,7 +518,15 @@ function sanitizeSlide(s) {
     return { layout, ...base, lead: sanitizeString(s.lead) };
   }
 
-  // bullets（compareからの倒し先を含む）・closing
+  if (layout === 'chart') {
+    const chart = sanitizeChart(s.chart);
+    if (chart) return { layout, ...base, chart };
+    // chartが崩れていれば箇条書きに倒す（写し取れる数値の中身が無いため、compareのような
+    // 救済はできない。書き出し側は layout:"bullets" として通常どおり描画する）。
+    layout = 'bullets';
+  }
+
+  // bullets（compare・chartからの倒し先を含む）・closing
   return { layout, ...base, bullets: sanitizeSlideBullets(s.bullets) };
 }
 
@@ -508,4 +574,5 @@ module.exports = {
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
   buildSlideOutlineSystemPrompt, buildSlideOutlineUserPrompt,
   buildSlideBodySystemPrompt, buildSlideBodyUserPrompt, parseDeckJson,
+  sanitizeChart,
 };

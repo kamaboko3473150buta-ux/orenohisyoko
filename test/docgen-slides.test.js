@@ -279,3 +279,51 @@ test('compareの両側とも中身が無ければ、これまでどおり空の�
   assert.strictEqual(slide.layout, 'bullets');
   assert.deepStrictEqual(slide.bullets, []);
 });
+
+// ---- chart レイアウト（Task 43） ----
+
+test('parseDeckJson: chartレイアウトが正規化されて残る', () => {
+  const raw = JSON.stringify({
+    title: 'T',
+    slides: [
+      { layout: 'title', heading: '表紙' },
+      {
+        layout: 'chart',
+        heading: '月別売上',
+        chart: { type: 'bar', title: '売上', labels: ['1月', '2月'], series: [{ name: '売上', values: [10, 20] }] },
+        note: 'グラフの補足',
+      },
+    ],
+  });
+  const { deck } = parseDeckJson(raw);
+  const slide = deck.slides.find((s) => s.heading === '月別売上');
+  assert.strictEqual(slide.layout, 'chart');
+  assert.deepStrictEqual(slide.chart, {
+    type: 'bar', title: '売上', labels: ['1月', '2月'], series: [{ name: '売上', values: [10, 20] }],
+  });
+  assert.strictEqual(slide.note, 'グラフの補足');
+});
+
+test('parseDeckJson: chartが崩れていればbulletsに倒れる', () => {
+  const raw = JSON.stringify({
+    title: 'T',
+    slides: [{
+      layout: 'chart',
+      heading: '壊れたグラフ',
+      chart: { type: 'bar', labels: ['1月', '2月'], series: [{ name: 'X', values: [1] }] },
+    }],
+  });
+  const { deck } = parseDeckJson(raw);
+  const slide = deck.slides.find((s) => s.heading === '壊れたグラフ');
+  assert.strictEqual(slide.layout, 'bullets');
+});
+
+test('parseDeckJson: chartが無いchartレイアウトもbulletsに倒れる', () => {
+  const raw = JSON.stringify({
+    title: 'T',
+    slides: [{ layout: 'chart', heading: 'chartキーが無い' }],
+  });
+  const { deck } = parseDeckJson(raw);
+  const slide = deck.slides.find((s) => s.heading === 'chartキーが無い');
+  assert.strictEqual(slide.layout, 'bullets');
+});

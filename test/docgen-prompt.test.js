@@ -4,6 +4,7 @@ const { findDocType, DOC_TYPES } = require('../src/main/docgen/types');
 const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
+  sanitizeChart,
 } = require('../src/main/docgen/prompt');
 
 // ---- types.js ----
@@ -211,7 +212,7 @@ test('parseBodyJson: sectionsが配列でない・bulletsが文字列・paragrap
 
   const raw2 = JSON.stringify({ title: 'X', sections: [{ heading: '見出し', paragraphs: ['正常'], bullets: '文字列です' }] });
   assert.deepStrictEqual(parseBodyJson(raw2).doc.sections, [{
-    heading: '見出し', paragraphs: ['正常'], bullets: [], table: null,
+    heading: '見出し', paragraphs: ['正常'], bullets: [], table: null, chart: null,
   }]);
 
   const raw3 = JSON.stringify({ title: 'X', sections: [{ heading: '見出し', paragraphs: ['正常', 123, null, '正常2'], bullets: [] }] });
@@ -329,4 +330,121 @@ test('parseBodyJson: tableが無いセクションはtable:nullになる（既�
   const raw = JSON.stringify({ title: 'X', sections: [{ heading: 'H', paragraphs: ['p'], bullets: [] }] });
   const { doc } = parseBodyJson(raw);
   assert.strictEqual(doc.sections[0].table, null);
+});
+
+// ---- sanitizeChart（Task 43） ----
+
+test('sanitizeChart: 正しい形はそのまま正規化される', () => {
+  const chart = sanitizeChart({
+    type: 'bar',
+    title: '月別売上',
+    labels: ['1月', '2月'],
+    series: [{ name: '売上', values: [120, 150] }],
+  });
+  assert.deepStrictEqual(chart, {
+    type: 'bar',
+    title: '月別売上',
+    labels: ['1月', '2月'],
+    series: [{ name: '売上', values: [120, 150] }],
+  });
+});
+
+test('sanitizeChart: typeが3種以外ならbarに倒す', () => {
+  const chart = sanitizeChart({
+    type: 'radar', labels: ['A'], series: [{ name: 'S', values: [1] }],
+  });
+  assert.strictEqual(chart.type, 'bar');
+});
+
+test('sanitizeChart: labelsと長さが合わない系列は捨てる（他の系列は残す）', () => {
+  const chart = sanitizeChart({
+    type: 'bar',
+    labels: ['1月', '2月', '3月'],
+    series: [
+      { name: '正常', values: [1, 2, 3] },
+      { name: '長さ違い', values: [1, 2] },
+    ],
+  });
+  assert.strictEqual(chart.series.length, 1);
+  assert.strictEqual(chart.series[0].name, '正常');
+});
+
+test('sanitizeChart: 数値でない値が混ざる系列は丸ごと捨てる', () => {
+  const chart = sanitizeChart({
+    type: 'line',
+    labels: ['1月', '2月'],
+    series: [
+      { name: '正常', values: [1, 2] },
+      { name: '壊れている', values: [1, 'NaN'] },
+      { name: 'nullも同様', values: [1, null] },
+    ],
+  });
+  assert.strictEqual(chart.series.length, 1);
+  assert.strictEqual(chart.series[0].name, '正常');
+});
+
+test('sanitizeChart: 系列が0本になればchart自体をnullにする', () => {
+  assert.strictEqual(sanitizeChart({ type: 'bar', labels: ['A'], series: [] }), null);
+  assert.strictEqual(
+    sanitizeChart({ type: 'bar', labels: ['A'], series: [{ name: 'X', values: [1, 2] }] }),
+    null,
+  );
+});
+
+test('sanitizeChart: labelsが空ならnullにする', () => {
+  assert.strictEqual(sanitizeChart({ type: 'bar', labels: [], series: [{ name: 'X', values: [] }] }), null);
+});
+
+test('sanitizeChart: 想定外の型（null・配列・文字列・object以外）でも例外を投げずnullになる', () => {
+  for (const bad of [null, undefined, '文字列', 123, [], ['配列']]) {
+    assert.doesNotThrow(() => sanitizeChart(bad));
+    assert.strictEqual(sanitizeChart(bad), null);
+  }
+});
+
+test('sanitizeChart: 値が0件・1件の系列でも落ちない', () => {
+  assert.strictEqual(sanitizeChart({ type: 'bar', labels: [], series: [{ name: 'X', values: [] }] }), null);
+  const chart = sanitizeChart({ type: 'pie', labels: ['唯一'], series: [{ name: 'X', values: [42] }] });
+  assert.deepStrictEqual(chart.labels, ['唯一']);
+  assert.deepStrictEqual(chart.series[0].values, [42]);
+});
+
+test('sanitizeChart: titleが無くても落ちない（空文字になる）', () => {
+  const chart = sanitizeChart({ type: 'bar', labels: ['A'], series: [{ values: [1] }] });
+  assert.strictEqual(chart.title, '');
+  assert.strictEqual(chart.series[0].name, '');
+});
+
+// ---- parseBodyJson: chart（Task 43） ----
+
+test('parseBodyJson: sectionのchartを正規化して取り込む', () => {
+  const raw = JSON.stringify({
+    title: 'X',
+    sections: [{
+      heading: '売上推移',
+      chart: {
+        type: 'line', title: '月別売上', labels: ['1月', '2月'], series: [{ name: '売上', values: [100, 120] }],
+      },
+    }],
+  });
+  const { doc } = parseBodyJson(raw);
+  assert.deepStrictEqual(doc.sections[0].chart, {
+    type: 'line', title: '月別売上', labels: ['1月', '2月'], series: [{ name: '売上', values: [100, 120] }],
+  });
+});
+
+test('parseBodyJson: chartが崩れていてもsection自体は落ちず、chart:nullになる', () => {
+  const raw = JSON.stringify({
+    title: 'X',
+    sections: [{ heading: 'H', paragraphs: ['p'], chart: { type: 'bar', labels: ['A', 'B'], series: [{ values: [1] }] } }],
+  });
+  const { doc } = parseBodyJson(raw);
+  assert.strictEqual(doc.sections[0].chart, null);
+  assert.strictEqual(doc.sections[0].heading, 'H');
+});
+
+test('parseBodyJson: chartが無いセクションはchart:nullになる（既存呼び出しとの互換）', () => {
+  const raw = JSON.stringify({ title: 'X', sections: [{ heading: 'H', paragraphs: ['p'] }] });
+  const { doc } = parseBodyJson(raw);
+  assert.strictEqual(doc.sections[0].chart, null);
 });
