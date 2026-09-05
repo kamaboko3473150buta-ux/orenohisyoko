@@ -11,6 +11,11 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Document, Packer, Paragraph, HeadingLevel } = require('docx');
+const PptxGenJS = require('pptxgenjs');
+
+// 日本語（游ゴシック）が文字化けしないよう明示するフォント。
+// buildHtml と同じ考え方（Windows標準搭載のフォントを優先し、無ければMeiryo系にフォールバック）。
+const SLIDE_FONT = 'Yu Gothic';
 
 // mail-compose/draft.js の escapeHtml と同じ考え方（あちらを import せず、
 // docgen 側で完結させるためここに複製する）。
@@ -186,4 +191,56 @@ async function writePdf(doc, filePath, browserWindowClass) {
   }
 }
 
-module.exports = { buildHtml, writeDocx, writePdf };
+// 1セクション分のスライドを組み立てる。
+// 箇条書きがあれば箇条書きを本文にし、無ければ段落をそのまま本文として置く
+// （どちらも無いセクションは normalizeDoc の時点で除かれているので、ここには来ない）。
+// スピーカーノートには、箇条書きを本文にした場合に限り paragraphs を入れる
+// （paragraphs を本文に使った場合はノートに入れても二重になるだけなので入れない）。
+function addSectionSlide(pptx, section) {
+  const slide = pptx.addSlide();
+
+  if (section.heading) {
+    slide.addText(section.heading, {
+      x: 0.4, y: 0.3, w: 9.2, h: 0.9,
+      fontFace: SLIDE_FONT, fontSize: 24, bold: true, valign: 'top',
+    });
+  }
+
+  const useBullets = section.bullets.length > 0;
+  const bodyLines = useBullets ? section.bullets : section.paragraphs;
+  if (bodyLines.length) {
+    const runs = bodyLines.map((line) => ({
+      text: line,
+      options: { bullet: useBullets, breakLine: true },
+    }));
+    slide.addText(runs, {
+      x: 0.4, y: 1.3, w: 9.2, h: 5.6,
+      fontFace: SLIDE_FONT, fontSize: 18, valign: 'top',
+    });
+  }
+
+  if (useBullets && section.paragraphs.length) {
+    slide.addNotes(section.paragraphs.join('\n\n'));
+  }
+}
+
+// doc を PowerPoint(.pptx) ファイルに書き出す。
+// 先頭にタイトルスライドを1枚置き、以降は1 section = 1 スライドにする。
+async function writePptx(doc, filePath) {
+  const { title, sections } = normalizeDoc(doc);
+  const pptx = new PptxGenJS();
+
+  const titleSlide = pptx.addSlide();
+  titleSlide.addText(title || '資料', {
+    x: 0.5, y: 2.7, w: 9, h: 1.5,
+    fontFace: SLIDE_FONT, fontSize: 32, bold: true, align: 'center', valign: 'middle',
+  });
+
+  for (const section of sections) {
+    addSectionSlide(pptx, section);
+  }
+
+  await pptx.writeFile({ fileName: filePath });
+}
+
+module.exports = { buildHtml, writeDocx, writePdf, writePptx };

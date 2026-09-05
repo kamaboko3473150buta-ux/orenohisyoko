@@ -121,19 +121,13 @@ Views.docgen = {
         renderSummary();
       });
 
-      // 出力形式。PowerPointはTask 31まで未実装なので、選んだ時点で「準備中」を伝える。
-      const formatNote = App.h('div', {
-        class: 'status',
-        text: 'PowerPoint出力は準備中です。今はWordかPDFでご利用ください。',
-        hidden: state.format !== 'pptx',
-      });
+      // 出力形式。
       function buildFormatRadio(value, label) {
         const id = `docFormat_${value}`;
         const input = App.h('input', { type: 'radio', name: 'docFormat', id });
         input.checked = state.format === value;
         input.addEventListener('change', () => {
           state.format = value;
-          formatNote.hidden = value !== 'pptx';
         });
         return App.h('span', {}, [input, App.h('label', { for: id, text: label })]);
       }
@@ -216,7 +210,6 @@ Views.docgen = {
           App.h('div', { class: 'field' }, [
             App.h('label', { text: '(4) 出力形式' }),
             formatRow,
-            formatNote,
           ]),
           errorEl,
           App.h('div', { class: 'actions' }, [
@@ -402,14 +395,8 @@ Views.docgen = {
         if (state.format === v) opt.selected = true;
         formatSelect.appendChild(opt);
       });
-      const formatNote = App.h('div', {
-        class: 'status',
-        text: 'PowerPoint出力は準備中です。今はWordかPDFでご利用ください。',
-        hidden: state.format !== 'pptx',
-      });
       formatSelect.addEventListener('change', () => {
         state.format = formatSelect.value;
-        formatNote.hidden = state.format !== 'pptx';
       });
 
       const backBtn = App.h('button', { class: 'secondary', text: '構成案からやり直す' });
@@ -420,12 +407,6 @@ Views.docgen = {
 
       saveBtn.addEventListener('click', async () => {
         errorEl.hidden = true;
-
-        if (state.format === 'pptx') {
-          errorEl.textContent = 'PowerPoint出力は準備中です。今はWordかPDFでご利用ください。';
-          errorEl.hidden = false;
-          return;
-        }
 
         saveBtn.disabled = true;
         saveBtn.textContent = '保存中…';
@@ -454,7 +435,6 @@ Views.docgen = {
           App.h('div', { class: 'field' }, [
             App.h('label', { text: '出力形式' }),
             formatSelect,
-            formatNote,
           ]),
           errorEl,
           App.h('div', { class: 'actions' }, [backBtn, saveBtn]),

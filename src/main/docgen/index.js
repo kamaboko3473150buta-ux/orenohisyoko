@@ -11,7 +11,7 @@ const {
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
 } = require('./prompt');
 const { OUTLINE_MAX_TOKENS, BODY_MAX_TOKENS } = require('./estimate');
-const { writeDocx, writePdf } = require('./writers');
+const { writeDocx, writePdf, writePptx } = require('./writers');
 const { generateText } = require('../claude');
 const { addUsage } = require('../usage');
 
@@ -103,19 +103,9 @@ function register({ getSettings, getUsage, saveUsage }) {
   });
 
   // 完成した資料をファイルに保存する。
-  // PowerPoint（Task 31で別途実装予定）が選ばれたときは、保存ダイアログを出さず
-  // 「準備中」を伝えるだけで終える（無いwritePptxを呼んで落ちないようにするため）。
   ipcMain.handle('doc:save', async (event, { doc, format } = {}) => {
-    if (format === 'pptx') {
-      return {
-        ok: false,
-        code: 'not_ready',
-        message: 'PowerPoint出力は準備中です。今はWordかPDFでご利用ください。',
-      };
-    }
-
-    const ext = format === 'pdf' ? 'pdf' : 'docx';
-    const filterName = format === 'pdf' ? 'PDFファイル' : 'Wordファイル';
+    const ext = format === 'pdf' ? 'pdf' : format === 'pptx' ? 'pptx' : 'docx';
+    const filterName = format === 'pdf' ? 'PDFファイル' : format === 'pptx' ? 'PowerPointファイル' : 'Wordファイル';
     const baseName = sanitizeFileName(doc && doc.title);
 
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -129,6 +119,8 @@ function register({ getSettings, getUsage, saveUsage }) {
     try {
       if (format === 'pdf') {
         await writePdf(doc, filePath, BrowserWindow);
+      } else if (format === 'pptx') {
+        await writePptx(doc, filePath);
       } else {
         await writeDocx(doc, filePath);
       }
