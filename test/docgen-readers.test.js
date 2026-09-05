@@ -10,6 +10,7 @@ const {
   readFiles,
   summarizeSheet,
   truncateText,
+  parseCsv,
   SHEET_SAMPLE_ROWS,
   MAX_CHARS_PER_FILE,
 } = require('../src/main/docgen/readers');
@@ -193,6 +194,204 @@ test('大きい.xlsxをreadFileTextに通すと、渡す文字数が元の全行
     // 省略した事実が本文に明記されていること
     assert.ok(result.text.includes('省略'));
     assert.ok(result.text.includes('件数')); // 数値列の要約が入っている
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// --- parseCsv（CSVの2次元配列化・純粋関数） ---------------------------------
+
+test('parseCsvが普通のカンマ区切り行を2次元配列にする', () => {
+  const csv = '名前,金額,メモ\n田中,100,A\n佐藤,200,B\n';
+  assert.deepStrictEqual(parseCsv(csv), [
+    ['名前', '金額', 'メモ'],
+    ['田中', '100', 'A'],
+    ['佐藤', '200', 'B'],
+  ]);
+});
+
+test('parseCsvはCRLF改行でも同じ結果になる', () => {
+  const csv = '名前,金額\r\n田中,100\r\n佐藤,200\r\n';
+  assert.deepStrictEqual(parseCsv(csv), [
+    ['名前', '金額'],
+    ['田中', '100'],
+    ['佐藤', '200'],
+  ]);
+});
+
+test('parseCsvは引用符で囲まれたセル内のカンマを区切りとして扱わない', () => {
+  const csv = '名前,住所\n田中,"東京都,千代田区1-1"\n';
+  assert.deepStrictEqual(parseCsv(csv), [
+    ['名前', '住所'],
+    ['田中', '東京都,千代田区1-1'],
+  ]);
+});
+
+test('parseCsvは引用符で囲まれたセル内の改行を1つのセルとして扱う', () => {
+  const csv = '名前,備考\n田中,"1行目\n2行目"\n佐藤,"通常セル"\n';
+  const rows = parseCsv(csv);
+  assert.deepStrictEqual(rows, [
+    ['名前', '備考'],
+    ['田中', '1行目\n2行目'],
+    ['佐藤', '通常セル'],
+  ]);
+});
+
+test('parseCsvは二重引用符のエスケープ（""）を1個の"に戻す', () => {
+  const csv = '名前,発言\n田中,"彼は""そう""言った"\n';
+  assert.deepStrictEqual(parseCsv(csv), [
+    ['名前', '発言'],
+    ['田中', '彼は"そう"言った'],
+  ]);
+});
+
+test('parseCsvはセル内カンマ・改行・二重引用符が同時に出てきても列がずれない', () => {
+  const csv = 'ID,住所,発言,金額\n1,"東京都,港区1-1","彼は""そう""言った\n次の行",1000\n2,大阪府,普通,2000\n';
+  const rows = parseCsv(csv);
+  assert.strictEqual(rows.length, 3);
+  assert.deepStrictEqual(rows[0], ['ID', '住所', '発言', '金額']);
+  assert.deepStrictEqual(rows[1], ['1', '東京都,港区1-1', '彼は"そう"言った\n次の行', '1000']);
+  assert.deepStrictEqual(rows[2], ['2', '大阪府', '普通', '2000']);
+});
+
+test('parseCsvは先頭のBOMを取り除く（1列目の見出しが壊れない）', () => {
+  const bom = '﻿';
+  const csv = `${bom}名前,金額\n田中,100\n`;
+  const rows = parseCsv(csv);
+  assert.strictEqual(rows[0][0], '名前'); // BOMが残っていると"﻿名前"になり見出しが壊れる
+  assert.deepStrictEqual(rows, [
+    ['名前', '金額'],
+    ['田中', '100'],
+  ]);
+});
+
+test('parseCsvは空文字列・空行・末尾改行でも例外を投げず余計な空行を作らない', () => {
+  assert.deepStrictEqual(parseCsv(''), []);
+  assert.deepStrictEqual(parseCsv(null), []);
+  assert.deepStrictEqual(parseCsv(undefined), []);
+
+  // 末尾に改行があっても、そのぶんの余計な空行を作らない
+  const csv = '名前,金額\n田中,100\n';
+  const rows = parseCsv(csv);
+  assert.strictEqual(rows.length, 2);
+
+  // 途中の空行は空欄1個の行として現れる（summarizeSheet側の「全セル空なら除外」フィルタに任せる）
+  const withBlank = '名前,金額\n田中,100\n\n佐藤,200\n';
+  const rows2 = parseCsv(withBlank);
+  assert.strictEqual(rows2.length, 4);
+  assert.deepStrictEqual(rows2[2], ['']);
+});
+
+// --- readFileText: .csv を summarizeSheet に通す ----------------------------
+
+test('.csvはparseCsv+summarizeSheetを通り、素の全文とは違う要約になる', async () => {
+  const csv = '名前,金額\n田中,100\n佐藤,200\n鈴木,300\n';
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-csv-'));
+  const filePath = path.join(tmpDir, 'small.csv');
+  try {
+    await fs.writeFile(filePath, csv, 'utf8');
+    const result = await readFileText(filePath);
+    assert.strictEqual(result.ok, true);
+    assert.ok(result.text.includes('件数3'));
+    assert.ok(result.text.includes('合計600'));
+    assert.ok(result.text.includes('平均200'));
+    assert.notStrictEqual(result.text, csv); // 素のテキストのままではない（要約されている）
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('.txtと.mdはこれまでどおり素のテキストのまま要約しない', async () => {
+  const content = '名前,金額\n田中,100\n佐藤,200\n';
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-plain-'));
+  try {
+    const txtPath = path.join(tmpDir, 'a.txt');
+    await fs.writeFile(txtPath, content, 'utf8');
+    const txtResult = await readFileText(txtPath);
+    assert.strictEqual(txtResult.ok, true);
+    assert.strictEqual(txtResult.text, content);
+
+    const mdPath = path.join(tmpDir, 'a.md');
+    await fs.writeFile(mdPath, content, 'utf8');
+    const mdResult = await readFileText(mdPath);
+    assert.strictEqual(mdResult.ok, true);
+    assert.strictEqual(mdResult.text, content);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('BOM付き.csvをreadFileTextに通しても1列目の見出しが壊れない', async () => {
+  const bom = '﻿';
+  const csv = `${bom}名前,金額\n田中,100\n佐藤,200\n`;
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-csv-bom-'));
+  try {
+    const filePath = path.join(tmpDir, 'bom.csv');
+    await fs.writeFile(filePath, csv, 'utf8');
+    const result = await readFileText(filePath);
+    assert.strictEqual(result.ok, true);
+    assert.ok(result.text.includes('見出し: 名前\t金額')); // "﻿名前"になっていない
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('セル内カンマ・改行・二重引用符を含む.csvでも列がずれず集計値が正しい', async () => {
+  const csv = [
+    'ID,住所,発言,金額',
+    '1,"東京都,港区1-1","彼は""そう""言った\n次の行",1000',
+    '2,大阪府,普通,2000',
+    '3,"愛知県,名古屋市",普通,3000',
+  ].join('\n');
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-csv-quote-'));
+  try {
+    const filePath = path.join(tmpDir, 'quoted.csv');
+    await fs.writeFile(filePath, csv, 'utf8');
+    const result = await readFileText(filePath);
+    assert.strictEqual(result.ok, true);
+    // 金額列がカンマ入りセルのせいでずれていれば、この集計は成立しない
+    assert.ok(result.text.includes('件数3'));
+    assert.ok(result.text.includes('合計6000'));
+    assert.ok(result.text.includes('平均2000'));
+    // セル内カンマ・改行・二重引用符の中身がそのままサンプルに出ている
+    assert.ok(result.text.includes('東京都,港区1-1'));
+    assert.ok(result.text.includes('彼は"そう"言った'));
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// --- readFileText: 大きい.csvを実際に読ませて文字数がExcel同等まで減ることを確認 ---
+
+test('5000行の.csvをreadFileTextに通すと、渡す文字数がExcel(.xlsx)同等まで減る', async () => {
+  const header = ['日付', '商品', '数量', '単価', '金額'];
+  const lines = [header.join(',')];
+  const ROWS = 5000;
+  for (let i = 1; i <= ROWS; i += 1) {
+    const qty = (i % 50) + 1;
+    const price = 100 + (i % 900);
+    const row = [`2026-01-${String((i % 28) + 1).padStart(2, '0')}`, `商品${i % 20}`, qty, price, qty * price];
+    lines.push(row.join(','));
+  }
+  const csv = lines.join('\n') + '\n';
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docgen-csv-big-'));
+  try {
+    const filePath = path.join(tmpDir, 'big.csv');
+    await fs.writeFile(filePath, csv, 'utf8');
+
+    const originalChars = csv.length;
+    const result = await readFileText(filePath);
+    assert.strictEqual(result.ok, true);
+    // 5000行のCSVは素のテキストなら数万字あるが、要約後はExcel同等(千字前後)まで減る
+    assert.ok(
+      result.chars < originalChars * 0.05,
+      `chars(${result.chars}) should be far less than original (${originalChars})`,
+    );
+    assert.ok(result.chars < 2000, `chars(${result.chars}) should be roughly Excel-equivalent (<2000)`);
+    // 集計値（合計・平均等）が渡っている＝数値列として認識されている
+    assert.ok(result.text.includes('[数値列の要約]'));
+    assert.ok(result.text.includes('省略'));
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

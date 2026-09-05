@@ -46,6 +46,89 @@ async function readPlainText(filePath) {
   return buf;
 }
 
+// Excelから書き出したCSVは先頭にBOM(U+FEFF)が付く。取り除かないと1列目の
+// 見出しが「﻿見出し」のように壊れるため、パースの前に必ず取り除く。
+function stripBom(text) {
+  if (typeof text === 'string' && text.charCodeAt(0) === 0xfeff) return text.slice(1);
+  return text;
+}
+
+// CSVテキスト → 2次元配列（1行目=見出し、以降=データ想定）。純粋関数。
+// RFC4180相当のクォート規則に対応する:
+//   - "a,b" のようにダブルクォートで囲まれたセルの中では , と改行を区切りとして扱わない
+//   - "" は1個の " にエスケープする
+// ここを雑にすると列がずれて数値集計が丸ごと壊れるため、状態機械で愚直に実装する。
+function parseCsv(text) {
+  const s = stripBom(String(text == null ? '' : text));
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  let i = 0;
+  const len = s.length;
+
+  while (i < len) {
+    const ch = s[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') {
+          field += '"'; // エスケープされた引用符
+          i += 2;
+        } else {
+          inQuotes = false; // 引用符の終わり
+          i += 1;
+        }
+      } else {
+        field += ch; // 引用符内は , も改行もそのままセルの中身
+        i += 1;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      i += 1;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+      i += 1;
+    } else if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && s[i + 1] === '\n') i += 1; // CRLFをまとめて1つの改行として扱う
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+      i += 1;
+    } else {
+      field += ch;
+      i += 1;
+    }
+  }
+
+  // 末尾に改行が無いまま終わった最後の行を回収する（末尾改行がある場合は
+  // 既に上のループでrows.pushされ、field/rowは空のままなのでここでは何もしない）。
+  if (field !== '' || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+// セルの文字列を、数値として解釈できるならNumberに変換する。summarizeSheetは
+// 「数値かどうか」をtypeof number で判定する（xlsx側の挙動に合わせるため）ので、
+// CSVの文字列のままだと数値列が1つも検出されず集計（合計・平均等）が出せない。
+// 見出し行は変換対象に含めない（"001"のような見出しの体裁を崩さないため）。
+function csvCellToValue(raw) {
+  if (raw === '') return '';
+  if (/^-?\d+(\.\d+)?$/.test(raw)) {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return raw;
+}
+
 // docx: word/document.xml だけを見る（ヘッダー・フッター・脚注は対象外。本文で十分なため）。
 async function readDocxText(filePath) {
   const zip = new AdmZip(filePath);
@@ -203,6 +286,19 @@ async function readXlsxText(filePath) {
   return parts.join('\n\n');
 }
 
+// csv: 全行をそのまま渡さず、xlsxと同じsummarizeSheetで要約する（Task 42）。
+// 素のテキストのまま渡すと5000行で数万字になり費用が跳ね上がるうえ、
+// 合計・平均も渡らず集計レポートが書けないため。
+async function readCsvText(filePath) {
+  const raw = await fs.readFile(filePath, 'utf8');
+  const rows = parseCsv(raw);
+  if (rows.length === 0) return '';
+  const header = rows[0];
+  const dataRows = rows.slice(1).map((row) => row.map(csvCellToValue));
+  const sheetName = path.basename(filePath, extOf(filePath));
+  return summarizeSheet(sheetName, [header, ...dataRows]);
+}
+
 // pdf: ページごとにテキストを連結する。verbosity:0 は「標準フォントが無い」等の
 // 描画向け警告を黙らせるため（テキスト抽出だけなら実害が無い）。
 async function readPdfText(filePath) {
@@ -241,8 +337,10 @@ async function readFileText(filePath) {
   }
   try {
     let text;
-    if (ext === '.txt' || ext === '.md' || ext === '.csv') {
+    if (ext === '.txt' || ext === '.md') {
       text = await readPlainText(filePath);
+    } else if (ext === '.csv') {
+      text = await readCsvText(filePath);
     } else if (ext === '.docx') {
       text = await readDocxText(filePath);
     } else if (ext === '.pptx') {
@@ -284,6 +382,7 @@ module.exports = {
   readFiles,
   summarizeSheet,
   truncateText,
+  parseCsv,
   SHEET_SAMPLE_ROWS,
   MAX_CHARS_PER_FILE,
 };
