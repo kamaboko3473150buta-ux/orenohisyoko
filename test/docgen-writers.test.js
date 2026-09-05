@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildHtml } = require('../src/main/docgen/writers');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const AdmZip = require('adm-zip');
+const { Document, Packer, ImageRun, Paragraph } = require('docx');
+const { buildHtml, writePresentationPptx } = require('../src/main/docgen/writers');
+const { pptxTextFromXml } = require('../src/main/docgen/office-text');
+const { extractImages, MIN_BYTES } = require('../src/main/docgen/images');
 
 // ---- 基本: 見出し・段落・箇条書きがそれぞれのタグになる ----
 
@@ -121,4 +128,266 @@ test('buildHtml: 日本語フォント指定が入っている', () => {
 test('buildHtml: 純粋関数（同じ入力なら同じ出力）', () => {
   const doc = { title: 'T', sections: [{ heading: 'H', paragraphs: ['P'], bullets: ['B'] }] };
   assert.strictEqual(buildHtml(doc), buildHtml(doc));
+});
+
+// ---- writePresentationPptx（Task 37: プレゼン専用のレイアウト付き書き出し） ----
+
+// 実物のPNGヘッダを持つ1x1の小さな透明PNG（extractImagesの出力と同じ形の
+// { id, path, sourceName, bytes } を自分で用意して渡す）。
+const TEST_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+async function mkTmpDir(prefix) {
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
+
+// 書き出した.pptxをadm-zipで開き、スライド本文・ノート・メディアを読み返すための小さなヘルパー。
+function readPptx(filePath) {
+  const zip = new AdmZip(filePath);
+  const entries = zip.getEntries().map((e) => e.entryName);
+  const slideNames = entries
+    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => Number(a.match(/slide(\d+)\.xml/)[1]) - Number(b.match(/slide(\d+)\.xml/)[1]));
+  const noteNames = entries
+    .filter((n) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(n))
+    .sort((a, b) => Number(a.match(/notesSlide(\d+)\.xml/)[1]) - Number(b.match(/notesSlide(\d+)\.xml/)[1]));
+  const mediaNames = entries.filter((n) => /^ppt\/media\/.+\.(png|jpe?g|gif)$/i.test(n));
+  return {
+    slideTexts: slideNames.map((n) => pptxTextFromXml(zip.readAsText(n))),
+    slideXmls: slideNames.map((n) => zip.readAsText(n)),
+    noteTexts: noteNames.map((n) => pptxTextFromXml(zip.readAsText(n))),
+    mediaNames,
+  };
+}
+
+function sixLayoutDeck() {
+  return {
+    title: '検証用資料',
+    subtitle: '副題テスト',
+    slides: [
+      { layout: 'title', heading: '表紙のタイトル', lead: '副題テキスト', note: '表紙のノート' },
+      { layout: 'statement', heading: '結論はこれだ', lead: '補足の一言', note: 'statementのノート' },
+      {
+        layout: 'bullets',
+        heading: '課題一覧',
+        bullets: ['課題1', '課題2', '課題3', '課題4', '課題5', '課題6（6行目、切り詰め確認用）'],
+        note: 'bulletsのノート',
+      },
+      {
+        layout: 'compare',
+        heading: '現行と新方式',
+        left: { heading: '現行', bullets: ['手入力', '転記あり'] },
+        right: { heading: '新方式', bullets: ['自動入力', '転記なし'] },
+        note: 'compareのノート',
+      },
+      {
+        layout: 'image', heading: '画像スライド', lead: '画像の説明', wantsImage: true, note: '画像のノート',
+      },
+      { layout: 'closing', heading: 'まとめ', bullets: ['次の一歩1', '次の一歩2'], note: 'closingのノート' },
+    ],
+  };
+}
+
+test('writePresentationPptx: 6レイアウトすべてを書き出し、スライド数・本文・ノート・画像を読み返せる', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-verify-');
+  try {
+    const imgPath = path.join(workDir, 'sample.png');
+    await fs.writeFile(imgPath, Buffer.from(TEST_PNG_BASE64, 'base64'));
+    const outPath = path.join(workDir, 'verify.pptx');
+    const images = [{ id: 'img-1', path: imgPath, sourceName: 'sample.docx', bytes: 999999 }];
+
+    await writePresentationPptx(sixLayoutDeck(), images, outPath);
+
+    const { slideTexts, noteTexts, mediaNames } = readPptx(outPath);
+
+    assert.ok(slideTexts.length >= 6, `スライドは6枚以上あるはず（実際: ${slideTexts.length}）`);
+
+    assert.match(slideTexts[0], /表紙のタイトル/);
+    assert.match(slideTexts[0], /副題テキスト/);
+    assert.match(slideTexts[1], /結論はこれだ/);
+    assert.match(slideTexts[2], /課題一覧/);
+    assert.match(slideTexts[2], /課題5/);
+    assert.doesNotMatch(slideTexts[2], /課題6/, '6行目は切り詰められて出ない');
+    assert.match(slideTexts[3], /現行/);
+    assert.match(slideTexts[3], /新方式/);
+    assert.match(slideTexts[3], /手入力/);
+    assert.match(slideTexts[3], /自動入力/);
+    assert.match(slideTexts[4], /画像スライド/);
+    assert.match(slideTexts[4], /画像の説明/);
+    assert.match(slideTexts[5], /まとめ/);
+    assert.match(slideTexts[5], /次の一歩1/);
+
+    assert.ok(mediaNames.length >= 1, '画像入りスライドの分、ppt/media/に画像が入っているはず');
+
+    assert.strictEqual(noteTexts.length, slideTexts.length, 'スライドごとにノートがあるはず');
+    assert.match(noteTexts[0], /表紙のノート/);
+    assert.match(noteTexts[4], /画像のノート/);
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writePresentationPptx: 16:9・Yu Gothic・濃紺(#1F3864)がXMLに入っている', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-look-');
+  try {
+    const outPath = path.join(workDir, 'look.pptx');
+    await writePresentationPptx(sixLayoutDeck(), [], outPath);
+    const zip = new AdmZip(outPath);
+    const presentationXml = zip.readAsText('ppt/presentation.xml');
+    assert.match(presentationXml, /sldSz[^>]*cx="9144000"[^>]*cy="5143500"/, '16:9のスライドサイズ');
+    const { slideXmls } = readPptx(outPath);
+    const joined = slideXmls.join('\n');
+    assert.match(joined, /Yu Gothic/, 'フォント指定がYu Gothic');
+    assert.match(joined, /1F3864/i, '濃紺の配色が使われている');
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writePresentationPptx: 画像が足りないimageスライドはstatementとして描かれる（画像を割り当てない）', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-noimg-');
+  try {
+    const outPath = path.join(workDir, 'noimg.pptx');
+    const deck = {
+      title: 'T',
+      slides: [
+        { layout: 'title', heading: '表紙' },
+        {
+          layout: 'image', heading: '画像が欲しいスライド', lead: '画像の代わりの説明', wantsImage: true,
+        },
+      ],
+    };
+    await writePresentationPptx(deck, [], outPath); // 画像を1枚も渡さない
+    const { slideTexts, mediaNames } = readPptx(outPath);
+    assert.match(slideTexts[1], /画像が欲しいスライド/);
+    assert.match(slideTexts[1], /画像の代わりの説明/);
+    assert.strictEqual(mediaNames.length, 0, '画像が無いので ppt/media/ に何も入らない');
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writePresentationPptx: compareでleft/rightが欠けていればbulletsとして描かれ、中身が残る', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-compare-');
+  try {
+    const outPath = path.join(workDir, 'compare.pptx');
+    const deck = {
+      title: 'T',
+      slides: [
+        { layout: 'compare', heading: '比較のはずが壊れている', left: { heading: '現行', bullets: ['手入力'] } },
+      ],
+    };
+    await writePresentationPptx(deck, [], outPath);
+    const { slideTexts } = readPptx(outPath);
+    assert.match(slideTexts[0], /比較のはずが壊れている/);
+    assert.match(slideTexts[0], /手入力/, 'leftにあった箇条書きの中身が救済される');
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writePresentationPptx: 未知のlayoutはbulletsとして描かれる', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-unknown-');
+  try {
+    const outPath = path.join(workDir, 'unknown.pptx');
+    const deck = { title: 'T', slides: [{ layout: 'nonsense', heading: '謎レイアウト', bullets: ['中身'] }] };
+    await writePresentationPptx(deck, [], outPath);
+    const { slideTexts } = readPptx(outPath);
+    assert.match(slideTexts[0], /謎レイアウト/);
+    assert.match(slideTexts[0], /中身/);
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writePresentationPptx: slidesが無い・型違い・nullでも例外を投げず、最低1枚は出る', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-broken-');
+  try {
+    const cases = [
+      { title: 'スライド無し' },
+      { title: '型違い', slides: 'not-an-array' },
+      null,
+      undefined,
+      {},
+    ];
+    let n = 0;
+    for (const deck of cases) {
+      n += 1;
+      const outPath = path.join(workDir, `broken-${n}.pptx`);
+      await assert.doesNotReject(writePresentationPptx(deck, null, outPath));
+      const { slideTexts } = readPptx(outPath);
+      assert.ok(slideTexts.length >= 1, `少なくとも1枚は出る（case ${n}）`);
+    }
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test('writePresentationPptx: 画像のpathが存在しなくても例外を投げず、statementに倒れる', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-badimg-');
+  try {
+    const outPath = path.join(workDir, 'badimg.pptx');
+    const deck = {
+      title: 'T',
+      slides: [{
+        layout: 'image', heading: '画像スライド', lead: '画像が無いので統計文へ', wantsImage: true,
+      }],
+    };
+    const images = [{ id: 'img-1', path: path.join(workDir, 'does-not-exist.png'), sourceName: 'x', bytes: 1 }];
+    await assert.doesNotReject(writePresentationPptx(deck, images, outPath));
+    const { slideTexts, mediaNames } = readPptx(outPath);
+    assert.match(slideTexts[0], /画像スライド/);
+    assert.match(slideTexts[0], /画像が無いので統計文へ/);
+    assert.strictEqual(mediaNames.length, 0, '読めない画像はppt/media/に入らない');
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+  }
+});
+
+// ---- 画像抽出（images.js）→ プレゼン書き出し（writers.js）の一連の流れ ----
+// index.js（Task 38）はこの2つを橋渡しするだけなので、Electronに依存しないここで
+// 「添付から実際に画像を抜き出し、そのままpptxに埋め込む」までを通しで確認する。
+
+test('extractImagesで取り出した画像をそのままwritePresentationPptxに渡すと、media配下に入る', async () => {
+  const workDir = await mkTmpDir('docgen-pptx-pipeline-src-');
+  const imgOutDir = await mkTmpDir('docgen-pptx-pipeline-img-');
+  const pptxDir = await mkTmpDir('docgen-pptx-pipeline-out-');
+  try {
+    // MIN_BYTESを超える適当なPNG（docgen-images.test.jsと同じ考え方: ヘッダのみ本物）。
+    const header = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+    const bigPng = Buffer.concat([header, Buffer.alloc(MIN_BYTES + 500 - header.length, 0)]);
+
+    const wordDoc = new Document({
+      sections: [{
+        children: [new Paragraph({
+          children: [new ImageRun({ data: bigPng, transformation: { width: 100, height: 100 }, type: 'png' })],
+        })],
+      }],
+    });
+    const buf = await Packer.toBuffer(wordDoc);
+    const docxPath = path.join(workDir, '参考資料.docx');
+    await fs.writeFile(docxPath, buf);
+
+    const images = await extractImages([docxPath], imgOutDir);
+    assert.strictEqual(images.length, 1, '前提: 添付から1枚取り出せている');
+
+    const outPath = path.join(pptxDir, 'pipeline.pptx');
+    const deck = {
+      title: '通し確認用資料',
+      slides: [
+        { layout: 'title', heading: '表紙' },
+        {
+          layout: 'image', heading: '添付から拾った画像', lead: '説明', wantsImage: true,
+        },
+      ],
+    };
+    await writePresentationPptx(deck, images, outPath);
+
+    const { slideTexts, mediaNames } = readPptx(outPath);
+    assert.match(slideTexts[1], /添付から拾った画像/);
+    assert.strictEqual(mediaNames.length, 1, '抽出した画像がppt/media/に1枚入る');
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true });
+    await fs.rm(imgOutDir, { recursive: true, force: true });
+    await fs.rm(pptxDir, { recursive: true, force: true });
+  }
 });

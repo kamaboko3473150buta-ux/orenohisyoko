@@ -7,6 +7,7 @@
 // そのため各関数は例外を投げず、空のものは出力しないという方針で書く。
 
 const fs = require('node:fs/promises');
+const { accessSync, constants: fsConstants } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -226,6 +227,8 @@ function addSectionSlide(pptx, section) {
 
 // doc を PowerPoint(.pptx) ファイルに書き出す。
 // 先頭にタイトルスライドを1枚置き、以降は1 section = 1 スライドにする。
+// これは「レポート等をそのままPowerPoint形式で保存したい」場合のための簡易版で、
+// プレゼン専用の writePresentationPptx（下記）とは役割を分けている。
 async function writePptx(doc, filePath) {
   const { title, sections } = normalizeDoc(doc);
   const pptx = new PptxGenJS();
@@ -243,4 +246,334 @@ async function writePptx(doc, filePath) {
   await pptx.writeFile({ fileName: filePath });
 }
 
-module.exports = { buildHtml, writeDocx, writePdf, writePptx };
+// ---- プレゼン専用のレイアウト付き書き出し（Task 37） ----------------------------------
+//
+// docgen/prompt.js の { title, subtitle, slides:[...] } という別形式（Task 36）を描く。
+// 実機で「文字だらけでプレゼン資料として使い物にならない」という指摘を受けたため、
+// レポート用の writePptx（見出し＋箇条書きを流し込むだけ）とは中身を分け、
+// レイアウトごとに全く違う絵にする。
+//
+// 呼び出し元（画面で編集された後のdeck）は必ずしも prompt.js の parseDeckJson を
+// 通っていない（画面上でユーザーが手で書き換えた後の値がそのまま来る）ため、
+// prompt.js の sanitizeSlide 等には依存せず、ここでも同じ堅牢さで正規化する
+// （writers.js を「AIの応答解析」を担う prompt.js に依存させたくない、という理由もある）。
+
+const SLIDE_W_IN = 10;
+const SLIDE_H_IN = 5.625;
+const SLIDE_NAVY = '1F3864';
+const SLIDE_HAIRLINE = 'C9D2E3';
+const SLIDE_BODY_COLOR = '22262B';
+const SLIDE_CARD_BG = 'F2F3F7';
+const SLIDE_WHITE = 'FFFFFF';
+
+const SLIDE_LAYOUTS = ['title', 'statement', 'bullets', 'compare', 'image', 'closing'];
+const MAX_SLIDE_BULLETS = 5;
+
+function sanitizeSlideBullets(v) {
+  return sanitizeStringArray(v).slice(0, MAX_SLIDE_BULLETS);
+}
+
+// compareの片側。見出し・箇条書きどちらも空ならnullを返し、呼び出し側でcompare自体を
+// bulletsに倒す判断材料にする。
+function sanitizeCompareSide(v) {
+  if (!v || typeof v !== 'object') return null;
+  const heading = sanitizeString(v.heading);
+  const bullets = sanitizeSlideBullets(v.bullets);
+  if (!heading && !bullets.length) return null;
+  return { heading, bullets };
+}
+
+// スライド1枚分を正規化する。layoutが6種以外・compareなのにleft/rightが欠けている、
+// といった崩れはすべてbulletsに倒し、例外を投げず必ず描画できる形にそろえる
+// （prompt.js の sanitizeSlide と同じ考え方の複製。中身が全部空のスライドはnullにして
+// 呼び出し側で捨てる）。
+function normalizeSlide(s) {
+  if (!s || typeof s !== 'object') return null;
+
+  const rawLayout = typeof s.layout === 'string' ? s.layout : '';
+  let layout = SLIDE_LAYOUTS.includes(rawLayout) ? rawLayout : 'bullets';
+
+  const heading = sanitizeString(s.heading);
+  const note = sanitizeString(s.note);
+  const lead = sanitizeString(s.lead);
+  let bullets = sanitizeSlideBullets(s.bullets);
+  let left = null;
+  let right = null;
+
+  if (layout === 'compare') {
+    left = sanitizeCompareSide(s.left);
+    right = sanitizeCompareSide(s.right);
+    if (!left || !right) {
+      // 片方しか無ければ、そこに書かれていた内容を箇条書きとして拾ってから倒す
+      // （せっかく作らせた中身をここで消してしまわないため）。
+      const salvaged = sanitizeSlideBullets([
+        ...((left && left.bullets) || []),
+        ...((right && right.bullets) || []),
+      ]);
+      if (salvaged.length) bullets = salvaged;
+      layout = 'bullets';
+      left = null;
+      right = null;
+    }
+  }
+
+  if (!heading && !lead && !bullets.length && !(left && right)) return null;
+
+  return {
+    layout, heading, note, lead, bullets, left, right,
+  };
+}
+
+function normalizeDeck(doc) {
+  const title = sanitizeString(doc && doc.title);
+  const subtitle = sanitizeString(doc && doc.subtitle);
+  const rawSlides = Array.isArray(doc && doc.slides) ? doc.slides : [];
+  const slides = rawSlides.map(normalizeSlide).filter((s) => s !== null);
+  return { title, subtitle, slides };
+}
+
+function addBottomBand(slide) {
+  slide.addShape('rect', {
+    x: 0, y: SLIDE_H_IN - 0.35, w: SLIDE_W_IN, h: 0.35,
+    fill: { color: SLIDE_NAVY }, line: { type: 'none' },
+  });
+}
+
+// 上部いっぱいの濃紺の帯に、白文字の見出しを重ねる（bullets用）。
+function addHeadingBand(slide, heading) {
+  slide.addShape('rect', {
+    x: 0, y: 0, w: SLIDE_W_IN, h: 1.0,
+    fill: { color: SLIDE_NAVY }, line: { type: 'none' },
+  });
+  if (heading) {
+    slide.addText(heading, {
+      x: 0.5, y: 0, w: SLIDE_W_IN - 1.0, h: 1.0,
+      fontFace: SLIDE_FONT, fontSize: 24, bold: true, color: SLIDE_WHITE, valign: 'middle',
+    });
+  }
+}
+
+// title: 中央にタイトル（40pt）、下にサブタイトル（18pt）、下端に濃紺の帯。
+function drawTitleSlide(pptx, slide) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  s.addText(slide.heading || '（無題）', {
+    x: 0.6, y: 1.7, w: SLIDE_W_IN - 1.2, h: 1.3,
+    fontFace: SLIDE_FONT, fontSize: 40, bold: true, color: SLIDE_NAVY, align: 'center', valign: 'middle',
+  });
+  if (slide.lead) {
+    s.addText(slide.lead, {
+      x: 0.6, y: 3.05, w: SLIDE_W_IN - 1.2, h: 0.7,
+      fontFace: SLIDE_FONT, fontSize: 18, color: SLIDE_BODY_COLOR, align: 'center', valign: 'top',
+    });
+  }
+  addBottomBand(s);
+  return s;
+}
+
+// statement: キーメッセージを大きく（32pt）中央に。leadを下に小さく。
+function drawStatementSlide(pptx, slide) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  s.addText(slide.heading || '', {
+    x: 0.6, y: 1.85, w: SLIDE_W_IN - 1.2, h: 1.4,
+    fontFace: SLIDE_FONT, fontSize: 32, bold: true, color: SLIDE_NAVY, align: 'center', valign: 'middle',
+  });
+  if (slide.lead) {
+    s.addText(slide.lead, {
+      x: 0.6, y: 3.5, w: SLIDE_W_IN - 1.2, h: 0.8,
+      fontFace: SLIDE_FONT, fontSize: 16, color: SLIDE_BODY_COLOR, align: 'center', valign: 'top',
+    });
+  }
+  return s;
+}
+
+// bullets: 上部に濃紺の見出し帯、その下に箇条書き（20pt・行間広め）。最大5行。
+function drawBulletsSlide(pptx, slide) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  addHeadingBand(s, slide.heading);
+  if (slide.bullets.length) {
+    const runs = slide.bullets.map((line) => ({
+      text: line,
+      options: { bullet: true, breakLine: true, paraSpaceAfter: 18 },
+    }));
+    s.addText(runs, {
+      x: 0.7, y: 1.4, w: SLIDE_W_IN - 1.4, h: SLIDE_H_IN - 1.8,
+      fontFace: SLIDE_FONT, fontSize: 20, color: SLIDE_BODY_COLOR, valign: 'top',
+    });
+  }
+  return s;
+}
+
+// compare: 左右2枚のカード（薄いグレー背景の角丸）。それぞれ見出し＋箇条書き。
+function drawCompareSlide(pptx, slide) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  if (slide.heading) {
+    s.addText(slide.heading, {
+      x: 0.5, y: 0.25, w: SLIDE_W_IN - 1.0, h: 0.7,
+      fontFace: SLIDE_FONT, fontSize: 22, bold: true, color: SLIDE_NAVY, valign: 'middle',
+    });
+  }
+  const cardY = 1.15;
+  const cardH = SLIDE_H_IN - cardY - 0.35;
+  const gap = 0.4;
+  const cardW = (SLIDE_W_IN - 1.0 - gap) / 2;
+  const cards = [
+    { x: 0.5, side: slide.left },
+    { x: 0.5 + cardW + gap, side: slide.right },
+  ];
+  cards.forEach(({ x, side }) => {
+    s.addShape('roundRect', {
+      x, y: cardY, w: cardW, h: cardH, rectRadius: 0.08,
+      fill: { color: SLIDE_CARD_BG }, line: { color: SLIDE_HAIRLINE, width: 1 },
+    });
+    if (side.heading) {
+      s.addText(side.heading, {
+        x: x + 0.25, y: cardY + 0.2, w: cardW - 0.5, h: 0.5,
+        fontFace: SLIDE_FONT, fontSize: 18, bold: true, color: SLIDE_NAVY, valign: 'top',
+      });
+    }
+    if (side.bullets.length) {
+      const runs = side.bullets.map((line) => ({
+        text: line,
+        options: { bullet: true, breakLine: true, paraSpaceAfter: 10 },
+      }));
+      s.addText(runs, {
+        x: x + 0.25, y: cardY + 0.75, w: cardW - 0.5, h: cardH - 1.0,
+        fontFace: SLIDE_FONT, fontSize: 15, color: SLIDE_BODY_COLOR, valign: 'top',
+      });
+    }
+  });
+  return s;
+}
+
+// image: 左に画像（縦横比を保って収める）、右にlead。
+// 画像の引き伸ばしで資料を台無しにしないよう、pptxgenjsの
+// sizing:{type:'contain'} を使う（枠に収まるよう縮小し、はみ出させない）。
+function drawImageSlide(pptx, slide, image) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  if (slide.heading) {
+    s.addText(slide.heading, {
+      x: 0.5, y: 0.25, w: SLIDE_W_IN - 1.0, h: 0.7,
+      fontFace: SLIDE_FONT, fontSize: 22, bold: true, color: SLIDE_NAVY, valign: 'middle',
+    });
+  }
+  const boxX = 0.5;
+  const boxY = 1.15;
+  const boxW = 5.2;
+  const boxH = SLIDE_H_IN - boxY - 0.4;
+  let imageDrawn = false;
+  if (image && typeof image.path === 'string') {
+    try {
+      s.addImage({
+        path: image.path,
+        x: boxX, y: boxY, w: boxW, h: boxH,
+        sizing: { type: 'contain', w: boxW, h: boxH },
+      });
+      imageDrawn = true;
+    } catch (err) {
+      imageDrawn = false; // 画像が壊れていても資料作成自体は止めない
+    }
+  }
+  if (!imageDrawn) {
+    // 想定外（画像が渡されなかった／壊れていて読めなかった）の保険。
+    // 通常はここに来る前に呼び出し側でstatementに倒すので、来るのは異常系のみ。
+    s.addShape('rect', {
+      x: boxX, y: boxY, w: boxW, h: boxH,
+      fill: { color: SLIDE_CARD_BG }, line: { color: SLIDE_HAIRLINE, width: 1 },
+    });
+  }
+  const leadX = boxX + boxW + 0.4;
+  const leadW = SLIDE_W_IN - leadX - 0.5;
+  if (slide.lead) {
+    s.addText(slide.lead, {
+      x: leadX, y: boxY, w: leadW, h: boxH,
+      fontFace: SLIDE_FONT, fontSize: 20, color: SLIDE_BODY_COLOR, valign: 'middle',
+    });
+  }
+  return s;
+}
+
+// closing: 中央に「まとめ」と箇条書き、下端に帯。
+function drawClosingSlide(pptx, slide) {
+  const s = pptx.addSlide();
+  s.background = { color: SLIDE_WHITE };
+  s.addText(slide.heading || 'まとめ', {
+    x: 0.6, y: 0.8, w: SLIDE_W_IN - 1.2, h: 0.9,
+    fontFace: SLIDE_FONT, fontSize: 32, bold: true, color: SLIDE_NAVY, align: 'center', valign: 'middle',
+  });
+  if (slide.bullets.length) {
+    const runs = slide.bullets.map((line) => ({
+      text: line,
+      options: { bullet: true, breakLine: true, paraSpaceAfter: 14 },
+    }));
+    s.addText(runs, {
+      x: 1.2, y: 1.9, w: SLIDE_W_IN - 2.4, h: 2.7,
+      fontFace: SLIDE_FONT, fontSize: 20, color: SLIDE_BODY_COLOR, valign: 'top',
+    });
+  }
+  addBottomBand(s);
+  return s;
+}
+
+// deck（{ title, subtitle, slides }）と画像一覧を PowerPoint(.pptx) に書き出す。
+// images は images.js の extractImages が返す [{ id, path, sourceName, bytes }]。
+// layoutが"image"のスライドに先頭から順に割り当て、足りなくなったらstatementとして描く。
+// 想定外のデータ（slides無し・型違い・null）でも例外を投げない。
+async function writePresentationPptx(doc, images, filePath) {
+  const { title, subtitle, slides: normalizedSlides } = normalizeDeck(doc);
+  const slides = normalizedSlides.length ? normalizedSlides : [{
+    layout: 'title', heading: title || '（無題）', note: '', lead: subtitle, bullets: [], left: null, right: null,
+  }];
+
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_16x9';
+
+  const pool = Array.isArray(images) ? images.filter((im) => im && typeof im.path === 'string') : [];
+  let imgIndex = 0;
+  // pptxgenjsは画像ファイルの読み込みをwriteFile実行時まで遅延させるため、addImageの
+  // 呼び出し時点でtry/catchしても存在しないファイルは検知できない。ここで事前に
+  // 読めるかどうかを確認し、壊れている・消えている画像はスキップして次の画像を試す
+  // （1枚壊れていても資料作成全体を止めないため）。
+  const nextImage = () => {
+    while (imgIndex < pool.length) {
+      const candidate = pool[imgIndex];
+      imgIndex += 1;
+      try {
+        accessSync(candidate.path, fsConstants.R_OK);
+        return candidate;
+      } catch (err) {
+        // このファイルは諦めて次の画像へ
+      }
+    }
+    return null;
+  };
+
+  for (const slide of slides) {
+    let s;
+    if (slide.layout === 'image') {
+      const image = nextImage();
+      s = image ? drawImageSlide(pptx, slide, image) : drawStatementSlide(pptx, slide);
+    } else if (slide.layout === 'title') {
+      s = drawTitleSlide(pptx, slide);
+    } else if (slide.layout === 'statement') {
+      s = drawStatementSlide(pptx, slide);
+    } else if (slide.layout === 'compare') {
+      s = drawCompareSlide(pptx, slide);
+    } else if (slide.layout === 'closing') {
+      s = drawClosingSlide(pptx, slide);
+    } else {
+      s = drawBulletsSlide(pptx, slide); // bullets（崩れた形の倒し先も含む）
+    }
+    if (slide.note) s.addNotes(slide.note);
+  }
+
+  await pptx.writeFile({ fileName: filePath });
+}
+
+module.exports = {
+  buildHtml, writeDocx, writePdf, writePptx, writePresentationPptx,
+};
