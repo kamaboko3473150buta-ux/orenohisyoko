@@ -91,12 +91,19 @@ window.Hishoko = (function () {
   }
 
   // 表情と一言を出す。
-  function say(expression, message) {
+  // opts.expand を true にすると、畳まれていても開く。
+  // 「相談する」のように利用者が結果を待っている操作のときだけ使う
+  // （それ以外で勝手に開くと、畳んだ意思を無視することになる）。
+  function say(expression, message, opts = {}) {
     ensureBuilt();
     setExpression(expression);
     const text = message == null ? '' : String(message);
     bubbleText.textContent = text;
     hasText = Boolean(text);
+    if (opts.expand && collapsed) {
+      collapsed = false;
+      writeCollapsed(false);
+    }
     paintBubbleVisibility();
   }
 

@@ -425,6 +425,9 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
   border-radius: 12px;
   padding: 10px 12px;
   box-shadow: 0 4px 14px rgba(22, 48, 43, .12);
+  /* 「今日の進め方」の答えのような長い文章も読めるようにする */
+  max-height: 46vh;
+  overflow-y: auto;
 }
 .hishoko-bubble p {
   margin: 0;

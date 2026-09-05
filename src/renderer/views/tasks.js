@@ -227,9 +227,17 @@ Views.tasks = {
       briefBtn.disabled = false;
       briefBtn.textContent = '今日の進め方を相談する';
 
-      briefResult.className = res.ok ? 'status' : 'error';
-      briefResult.textContent = res.message;
-      briefResult.hidden = false;
+      // 相談の答えは秘書子に言わせる（右下の空きスペースを使う）。
+      // 待って押した操作なので、畳まれていても開く。
+      if (res.ok) {
+        Hishoko.say('normal', res.message, { expand: true });
+        briefResult.hidden = true;
+      } else {
+        Hishoko.say('trouble', res.message, { expand: true });
+        briefResult.className = 'error';
+        briefResult.textContent = res.message;
+        briefResult.hidden = false;
+      }
       if (!res.ok && (res.code === 'no_key' || res.code === 'auth')) App.go('settings');
     });
 
