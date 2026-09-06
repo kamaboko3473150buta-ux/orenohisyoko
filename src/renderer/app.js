@@ -20,18 +20,39 @@ const SIDEBAR_SECTIONS = {
   home: null, // トップページはサイドバーのどの項目も選択状態にしない
 };
 
+// 「戻る」は今までたどった順（ページバック）ではなく、画面の上下関係でひとつ上に戻る。
+// 「仕事を頼む」→「設定」→戻る、で「仕事を頼む」ではなくトップに戻るのが自然なため。
+// preview だけは、どこから開いたかで戻り先が変わる（入力画面に戻れないと直せない）ので、
+// 開いた画面が App.state.previewFrom に入れておく。
+const PARENT_VIEW = {
+  home: null,
+  menu: 'home',
+  salon: 'home',
+  breaktime: 'home',
+  settings: 'home',
+  mailmenu: 'menu',
+  tasks: 'menu',
+  docgen: 'menu',
+  translate: 'menu',
+  compose: 'mailmenu',
+  reply: 'mailmenu',
+  history: 'mailmenu',
+  addressbook: 'mailmenu',
+  preview: 'mailmenu',
+};
+
 const App = {
   el: document.getElementById('app'),
   titleEl: document.getElementById('pageTitle'),
   backBtn: document.getElementById('backBtn'),
   sidebarItems: Array.from(document.querySelectorAll('.sidebar-item')),
   state: {},   // 画面をまたいで持ち回るデータ（入力内容・生成結果など）
-  history: [],
+  current: null,
 
   go(viewName, opts = {}) {
-    if (!opts.replace) this.history.push(viewName);
-    // トップページでは戻る先があっても戻るボタンは出さない（画面の役割上、常に起点のため）。
-    this.backBtn.hidden = viewName === 'home' || this.history.length <= 1;
+    this.current = viewName;
+    // 上に戻る先がある画面だけ「戻る」を出す（トップページには出さない）。
+    this.backBtn.hidden = !this.parentOf(viewName);
     this.el.innerHTML = '';
 
     document.body.classList.toggle('home-view', viewName === 'home');
@@ -67,11 +88,15 @@ const App = {
       });
   },
 
+  // ひとつ上の画面の名前。無ければ null（＝戻るボタンを出さない）。
+  parentOf(viewName) {
+    if (viewName === 'preview' && this.state.previewFrom) return this.state.previewFrom;
+    return PARENT_VIEW[viewName] || null;
+  },
+
   back() {
-    this.history.pop();
-    const prev = this.history[this.history.length - 1] || 'home';
-    this.history.pop();
-    this.go(prev);
+    const parent = this.parentOf(this.current);
+    if (parent) this.go(parent);
   },
 
   setTitle(t) { this.titleEl.textContent = t; },

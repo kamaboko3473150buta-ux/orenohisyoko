@@ -23,6 +23,8 @@ Views.history = {
           App.state.result = item.scene === 'reply'
             ? { subject: '', body: item.body || '', to: '', mode: 'reply' }
             : { subject: item.subject || '', body: item.body || '', to: item.to || '', mailer: 'outlook' };
+          // 戻るときは入力画面に帰れるようにする（プレビューから直せないと困るため）
+          App.state.previewFrom = 'history';
           App.go('preview');
         },
       }, [

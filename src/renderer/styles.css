@@ -493,12 +493,17 @@ body.home-view main {
 }
 
 /* 秘書子は背景内の横幅43〜60%あたりに立っている。吹き出しはその頭の上に置く。 */
+/* 秘書子は背景の中で「横52%・頭の上12%」の位置に立っている（画像から実測）。
+   吹き出しは下端をその頭の少し上に合わせ、しっぽが頭を指すようにする。 */
 .home-bubble {
   position: absolute;
-  left: 51%;
-  top: 8%;
+  left: 52%;
+  bottom: 89%;
   transform: translateX(-50%);
-  max-width: min(360px, 80vw);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, 80vw);
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: 16px;
@@ -528,20 +533,16 @@ body.home-view main {
   transform: rotate(45deg);
 }
 
-/* 頭のあたりに添える小さな表情アイコン。背景写真自体は差し替えないため、
-   表情の変化はこのアイコンで伝える。 */
+/* 吹き出しの中に置く小さな表情。背景の秘書子の顔に重ねると顔が隠れるので、
+   話し手の目印として吹き出し側に添える。 */
 .home-expression {
-  position: absolute;
-  left: 51%;
-  top: 30%;
-  transform: translate(-50%, -50%);
-  width: 56px;
-  height: 56px;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  border: 3px solid var(--accent);
+  border: 2px solid var(--accent);
   background: var(--accent-weak);
   object-fit: cover;
-  pointer-events: none;
 }
 
 /* --- 秘書子の吹き出し（全画面共通） --- */

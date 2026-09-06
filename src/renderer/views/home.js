@@ -103,18 +103,15 @@ window.Views = window.Views || {};
         class: 'home-bubble',
         title: 'クリックで一言が変わります',
       });
-      bubble.appendChild(bubbleText);
 
-      const badge = App.h('img', { class: 'home-expression', alt: '秘書子' });
-      // 表情画像が無くても（読み込みに失敗しても）吹き出しと操作は生かしたままにする。
-      badge.addEventListener('error', () => { badge.style.display = 'none'; });
+      // トップページには丸枠の秘書子を出さない。背景に本人が立っているので、
+      // 小さな顔をもう一つ添えると二重になる。表情はセリフの選び方で伝える。
+      bubble.appendChild(bubbleText);
 
       let current = null;
       function applyLine(line) {
         current = line;
         bubbleText.textContent = line.text;
-        badge.style.display = '';
-        badge.src = `../../assets/hishoko/${line.expr}.png`;
       }
 
       bubble.addEventListener('click', () => {
@@ -122,7 +119,6 @@ window.Views = window.Views || {};
         applyLine(pickLine(pool, current && current.text));
       });
 
-      scene.appendChild(badge);
       scene.appendChild(bubble);
       root.appendChild(scene);
 

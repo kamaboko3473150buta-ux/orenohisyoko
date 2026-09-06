@@ -85,6 +85,8 @@ Views.reply = {
         return;
       }
       App.state.result = { subject: '', body: res.body, to: '', mode: 'reply' };
+      // 戻るときは入力画面に帰れるようにする（プレビューから直せないと困るため）
+      App.state.previewFrom = 'reply';
       App.go('preview');
     });
   },

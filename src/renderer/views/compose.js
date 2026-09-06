@@ -316,6 +316,8 @@ Views.compose = {
         bcc: byField('bcc'),
         mailer: f.mailer,
       };
+      // 戻るときは入力画面に帰れるようにする（プレビューから直せないと困るため）
+      App.state.previewFrom = 'compose';
       App.go('preview');
     });
   },
