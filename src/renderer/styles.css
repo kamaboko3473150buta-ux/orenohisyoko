@@ -635,84 +635,310 @@ body.home-view main {
 
 /* --- 息抜き（ミニゲーム） --- */
 
-.game-board { display: flex; flex-direction: column; gap: 18px; margin: 16px 0 4px; }
-.game-hand { display: flex; align-items: center; gap: 14px; }
-.game-hand-label {
-  width: 60px;
-  flex: none;
-  font-size: 13px;
+/* 遊び方の一行。白いカードの箱に入れると事務書類に見えるので、卓の上に直接添える */
+.game-intro {
+  margin: 0 2px;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.6;
   color: var(--muted);
 }
-.game-cards { display: flex; gap: 12px; }
 
-/* トランプの札。表・裏・取られた札で見た目を変える */
-.pcard {
-  width: 74px;
-  height: 104px;
-  border-radius: 10px;
-  border: 1px solid var(--line-strong);
+/* 卓。上半分は写真（オフィスと、向かいに座っている秘書子）、
+   その下に木目を継ぎ足して札を並べる場所にする。
+   写真の天板は下1/3しかなく、16枚を並べる高さが足りないため。
+   継ぎ目の色 #835847 は写真の切り口（縦70%の位置）から採った実測値。
+   写真を差し替えたら、切り口の割合（--band）と色も測り直すこと。 */
+.scene {
+  /* 写真のうち上から何割を見せるか。.72 は「手や袖が写り込まなくなり、
+     切り口の一行がぜんぶ木目になる」位置（実測）。ここより上で切ると、
+     継ぎ足した木目との色が合わずに横線が見えてしまう。 */
+  --band: .72;
+  width: min(100%, 440px);
+  margin: 6px auto 0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 28px rgba(22, 48, 43, .26);
+}
+.scene-wide { width: min(100%, 470px); }
+
+.scene-figure {
+  position: relative;
+  aspect-ratio: 1 / var(--band);   /* 元画像は正方形。下を切って天板の手前で止める */
+  background-image: url('../../assets/games/table-scene.jpg');
+  background-size: 100% auto;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+/* 写真の天板のつづき。ここに札や駒を置く */
+.scene-table {
+  padding: 12px 16px;
+  background:
+    repeating-linear-gradient(180deg, rgba(0, 0, 0, .05) 0 1px, rgba(255, 255, 255, .022) 1px 3px, transparent 3px 11px),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .05), transparent 70%),
+    linear-gradient(180deg, #794e3e 0%, #764b3b 55%, #6f4635 100%);
+  color: rgba(255, 255, 255, .92);
+}
+
+/* 秘書子の一言。写真のオフィス部分に浮かせる（顔にかぶせない） */
+.scene-bubble {
+  position: absolute;
+  left: 3%;
+  top: 6%;
+  max-width: 44%;
+  padding: 9px 13px;
+  border-radius: 14px;
   background: #fff;
   color: var(--text);
-  font-size: 20px;
-  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .32);
+}
+/* クラスで display を指定する要素は、hidden を必ず打ち消す
+   （既定の [hidden]{display:none} はクラス指定に負ける） */
+.scene-bubble[hidden] { display: none; }
+.scene-bubble p { margin: 0; font-size: 13px; line-height: 1.6; }
+.scene-bubble::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+/* 手札は天板の上に中央ぞろえで置く */
+.seat-cards {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  min-height: 95px;
+}
+.seat-cards .pcard, .seat-cards .pslot { width: 68px; height: 95px; }
+.seat-cards .ppip { font-size: 30px; }
+.seat-label {
+  display: block;
+  width: 104px;
+  margin: 10px auto 0;
+  text-align: center;
+  font-size: 11.5px;
+  letter-spacing: .1em;
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .28);
+  color: rgba(255, 255, 255, .88);
+}
+
+/* --- 札 --- */
+
+.pcard {
+  --tilt: 0deg;
+  width: 78px;
+  height: 110px;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  perspective: 800px;
+  transform: rotate(var(--tilt));
+}
+.pcard-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  transform-style: preserve-3d;
+  transition: transform .42s cubic-bezier(.2, .7, .3, 1);
+}
+.pcard.is-up .pcard-inner { transform: rotateY(180deg); }
+.pface {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  backface-visibility: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  box-shadow: 0 2px 6px rgba(22, 48, 43, .12);
 }
-.pcard.red { color: #c0392b; }
-.pcard.joker { color: var(--accent); font-size: 15px; letter-spacing: .04em; }
-
-/* 裏面はボタンとして押せる。押せないときは沈ませる */
-button.pcard {
-  cursor: pointer;
-  transition: transform .12s, border-color .12s;
+/* 裏面。実物の札のように白い縁を残す */
+.pface-back {
+  background-color: #1d5340;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, .11) 0 3px, transparent 3px 8px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, .11) 0 3px, transparent 3px 8px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .38), inset 0 0 0 4px #f6f4ee, inset 0 0 0 5px rgba(0, 0, 0, .16);
 }
-button.pcard:hover:not(:disabled) { transform: translateY(-4px); border-color: var(--accent); background: #fff; }
-button.pcard:disabled { cursor: default; opacity: 1; }
-.pcard.back {
-  background: repeating-linear-gradient(45deg, var(--accent) 0 6px, var(--accent-hover) 6px 12px);
-  color: rgba(255, 255, 255, .85);
-  border-color: var(--accent);
+.pface-front {
+  transform: rotateY(180deg);
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 5px 6px;
+  background: linear-gradient(#fff, #f7f5f0);
+  color: #1b1b1b;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .38), inset 0 0 0 1px rgba(0, 0, 0, .10);
 }
-button.pcard.back:hover:not(:disabled) { background: repeating-linear-gradient(45deg, var(--accent-hover) 0 6px, var(--accent) 6px 12px); }
-
-/* .card p が「クラス＋要素」で強いため、こちらも要素名を付けて上書きする */
-.card p.game-status { margin: 12px 0 0; font-size: 14px; color: var(--text); min-height: 1.6em; }
-.card p.game-status.win { color: var(--accent); font-weight: 600; }
-.card p.game-status.lose { color: #c0392b; font-weight: 600; }
-.card p.game-score { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
-.game-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.game-actions button { flex: none; }
-
-/* 神経衰弱の盤面。8組16枚を4列で並べる */
-.memory-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 74px);
-  gap: 10px;
-  margin: 14px 0 4px;
-}
-.memory-cell { width: 74px; height: 88px; font-size: 18px; }
-.memory-cell.taken-you { background: var(--accent-weak); border-color: var(--accent); opacity: .75; }
-.memory-cell.taken-hishoko { background: #f1efe9; border-color: var(--line); opacity: .55; }
-
-/* クリップ取り。取ると数が減るだけなので、粒が見えることが大事 */
-.clip-pile {
+.pface-front.red { color: #c0392b; }
+.pface-front.joker { color: #2f7f63; }
+.pcorner {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 16px 0 6px;
-  min-height: 84px;
-  align-content: flex-start;
-  max-width: 420px;
+  flex-direction: column;
+  align-items: center;
+  align-self: flex-start;
+  line-height: 1.05;
+  font-size: 12.5px;
+  font-weight: 700;
 }
-.clip { font-size: 26px; line-height: 1; }
-.game-hand-empty {
+.pcorner-suit { font-size: 11px; }
+.pcorner + .ppip + .pcorner { align-self: flex-end; transform: rotate(180deg); }
+.ppip {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  height: 104px;
-  color: var(--accent);
-  font-size: 14px;
+  justify-content: center;
+  font-size: 34px;
+  line-height: 1;
+  pointer-events: none;
+}
+.ppip-joker {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  writing-mode: vertical-rl;
+}
+
+button.pcard { cursor: pointer; transition: transform .16s ease-out; }
+button.pcard:hover:not(:disabled) { transform: rotate(var(--tilt)) translateY(-9px); }
+button.pcard:disabled { cursor: default; }
+button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 10px; }
+
+/* 札が無くなった場所（上がった手・取り終えた枠） */
+.pslot {
+  width: 78px;
+  height: 110px;
+  flex: none;
+  border-radius: 8px;
+  border: 2px dashed rgba(255, 255, 255, .26);
+  background: rgba(0, 0, 0, .13);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
   font-weight: 600;
+  color: rgba(255, 255, 255, .8);
+}
+
+/* 卓の上の一言（手番・勝敗） */
+.table-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, .14);
+  font-size: 13.5px;
+  min-height: 1.5em;
+  color: rgba(255, 255, 255, .92);
+}
+.table-note.win { color: #b6f0cd; font-weight: 600; }
+.table-note.lose { color: #ffcdc3; font-weight: 600; }
+
+.game-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; }
+.game-actions button { flex: none; }
+
+/* --- 神経衰弱の盤面 --- */
+
+.memory-area { display: flex; justify-content: center; align-items: flex-start; gap: 18px; }
+.memory-grid { display: grid; grid-template-columns: repeat(8, 46px); gap: 7px; }
+.memory-grid .pcard { width: 46px; height: 64px; }
+.memory-grid .pcard .ppip { font-size: 21px; }
+.memory-grid .pcard .pcorner { font-size: 11px; }
+.memory-grid .pcard .pcorner-suit { font-size: 10px; }
+.memory-grid .pslot { width: 46px; height: 64px; }
+.memory-side { display: flex; flex-direction: row; justify-content: center; gap: 28px; margin-top: 8px; }
+
+/* 取った組は実際に重ねて置く。数字だけより、取った量が目で分かる */
+.pile-stack { position: relative; height: 40px; width: 52px; }
+.pile-chip {
+  position: absolute;
+  left: var(--nudge, 0px);
+  top: calc(var(--i) * 3px);
+  width: 48px;
+  height: 25px;
+  border-radius: 5px;
+  background-color: #1d5340;
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, .11) 0 3px, transparent 3px 8px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4), inset 0 0 0 2px #f6f4ee;
+}
+.pile-label { font-size: 12px; color: rgba(255, 255, 255, .85); text-align: center; }
+
+/* --- クリップ取り --- */
+
+/* 机にばらまいた感じにしたいので、幅を絞って2〜3段に折り返させる。
+   1列に並ぶと整列した在庫のように見えてしまう。 */
+.clip-scatter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 14px 18px;
+  width: 100%;
+  max-width: 430px;
+  min-height: 128px;
+  margin: 0 auto;
+  padding: 12px 6px;
+}
+.clip {
+  display: block;
+  width: 26px;
+  height: 48px;
+  transform: rotate(var(--rot, 0deg)) translate(var(--dx, 0px), var(--dy, 0px));
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45));
+}
+.clip svg { display: block; width: 100%; height: 100%; }
+
+/* 盤面のマス。札は置いたまま、取られたら消える（取った人の山に移った見え方）。
+   下に敷いたへこみが残るので、どこに何枚あったかが分かる。 */
+.memory-slot { position: relative; width: 46px; height: 64px; }
+.memory-slot .pslot { position: absolute; inset: 0; width: 100%; height: 100%; }
+.memory-slot .pcard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity .32s, transform .32s;
+}
+.memory-slot.is-empty .pcard { opacity: 0; transform: scale(.86); pointer-events: none; }
+
+/* 秘書子側とあなた側のあいだ。卓の中央線 */
+.table-middle {
+  height: 1px;
+  margin: 8px 12%;
+  background: rgba(255, 255, 255, .12);
+}
+
+/* 対戦画面は1画面に収めたいので下の余白を詰める */
+body.game-view main { padding-bottom: 14px; }
+
+/* 息抜きの入口。ボードゲームカフェの絵を敷いて、仕事の画面と気分を変える */
+.breaktime-hero {
+  position: relative;
+  height: 190px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  overflow: hidden;
+  background-image: url('../../assets/games/boardgame-cafe.jpg');
+  background-size: cover;
+  background-position: center 38%;
+  box-shadow: 0 10px 24px rgba(22, 48, 43, .24);
+  display: flex;
+  align-items: flex-end;
+}
+.breaktime-hero p {
+  margin: 0;
+  width: 100%;
+  padding: 26px 18px 12px;
+  font-size: 13.5px;
+  color: #fff;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .62));
 }

@@ -53,6 +53,11 @@ Views.breaktime = {
   render(root) {
     App.setTitle('息抜き');
 
+    // 入口の絵。ここから先は仕事ではない、と一目で分かるようにする。
+    root.appendChild(App.h('div', { class: 'breaktime-hero' }, [
+      App.h('p', { text: 'ひと息つきましょう。秘書子と1対1で遊べます。' }),
+    ]));
+
     const levelRow = App.h('div', { class: 'chips' });
     const paintLevels = () => {
       levelRow.innerHTML = '';
