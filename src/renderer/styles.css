@@ -474,6 +474,76 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 }
 .doc-paragraphs, .doc-bullets { min-height: 96px; }
 
+/* --- トップページ（オフィスの背景・Task 46） --- */
+
+/* トップページでは main の余白・最大幅をやめ、背景を画面いっぱいに敷く */
+body.home-view main {
+  padding: 0;
+  max-width: none;
+}
+
+.home-office {
+  position: relative;
+  width: 100%;
+  min-height: calc(100vh - 40px); /* ヘッダーの高さぶんを差し引いた目安 */
+  background-color: var(--bg);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+/* 秘書子は背景内の横幅43〜60%あたりに立っている。吹き出しはその頭の上に置く。 */
+.home-bubble {
+  position: absolute;
+  left: 51%;
+  top: 8%;
+  transform: translateX(-50%);
+  max-width: min(360px, 80vw);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  padding: 14px 18px;
+  box-shadow: 0 6px 20px rgba(22, 48, 43, .22);
+  cursor: pointer;
+}
+.home-bubble:hover { border-color: var(--accent); }
+.home-bubble p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.home-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  background: var(--panel);
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+
+/* 頭のあたりに添える小さな表情アイコン。背景写真自体は差し替えないため、
+   表情の変化はこのアイコンで伝える。 */
+.home-expression {
+  position: absolute;
+  left: 51%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: var(--accent-weak);
+  object-fit: cover;
+  pointer-events: none;
+}
+
 /* --- 秘書子の吹き出し（全画面共通） --- */
 
 .hishoko-widget {
