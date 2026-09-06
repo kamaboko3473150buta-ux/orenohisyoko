@@ -17,7 +17,7 @@ function announceDueSoon(dueSoon) {
 
 Views.menu = {
   async render(root) {
-    App.setTitle('俺の秘書子');
+    App.setTitle('仕事を頼む');
     root.appendChild(App.h('div', { class: 'card clickable', onclick: () => App.go('mailmenu') }, [
       App.h('h2', { text: '✉ メール文面作成' }),
       App.h('p', { text: '新規メールの作成・返信文の作成・作成した文面の履歴はこちらから' }),

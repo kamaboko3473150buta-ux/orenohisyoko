@@ -127,5 +127,12 @@ window.Hishoko = (function () {
     clear();
   }
 
-  return { say, clear, reset };
+  // トップページ（home）では大きな秘書子が背景内に立っているため、
+  // 右下の常駐ウィジェットは二重に見えないよう隠す。他の画面では必ず出す。
+  function setHidden(hide) {
+    ensureBuilt();
+    widget.hidden = Boolean(hide);
+  }
+
+  return { say, clear, reset, hide: () => setHidden(true), show: () => setHidden(false) };
 }());

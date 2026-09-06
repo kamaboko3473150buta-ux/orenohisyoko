@@ -1,21 +1,50 @@
 // src/renderer/app.js
 // 画面の切り替えと、全画面で使う小さな道具。
 
+// サイドバーの項目ごとに、どの画面名がその項目に属するかをまとめる。
+// 「仕事を頼む」配下は既存の4機能とその中の全画面（メール文面作成・タスク・資料作成・翻訳）。
+const SIDEBAR_SECTIONS = {
+  menu: 'menu',
+  mailmenu: 'menu',
+  addressbook: 'menu',
+  compose: 'menu',
+  reply: 'menu',
+  preview: 'menu',
+  history: 'menu',
+  tasks: 'menu',
+  docgen: 'menu',
+  translate: 'menu',
+  salon: 'salon',
+  breaktime: 'breaktime',
+  settings: 'settings',
+  home: null, // トップページはサイドバーのどの項目も選択状態にしない
+};
+
 const App = {
   el: document.getElementById('app'),
   titleEl: document.getElementById('pageTitle'),
   backBtn: document.getElementById('backBtn'),
+  sidebarItems: Array.from(document.querySelectorAll('.sidebar-item')),
   state: {},   // 画面をまたいで持ち回るデータ（入力内容・生成結果など）
   history: [],
 
   go(viewName, opts = {}) {
     if (!opts.replace) this.history.push(viewName);
-    this.backBtn.hidden = this.history.length <= 1;
+    // トップページでは戻る先があっても戻るボタンは出さない（画面の役割上、常に起点のため）。
+    this.backBtn.hidden = viewName === 'home' || this.history.length <= 1;
     this.el.innerHTML = '';
+
+    document.body.classList.toggle('home-view', viewName === 'home');
+    this.paintSidebar(viewName);
 
     // 画面を移ったら秘書子はいったん既定（微笑・吹き出しなし）に戻す。
     // 伝えることがある画面は、このあと自分で say() して上書きする。
-    if (window.Hishoko) Hishoko.reset();
+    if (window.Hishoko) {
+      Hishoko.reset();
+      // トップページ（home）は大きな秘書子が背景内に立っているので、
+      // 右下の常駐ウィジェットは隠す（二重表示を避ける）。他の画面では出す。
+      if (viewName === 'home') Hishoko.hide(); else Hishoko.show();
+    }
 
     // 画面によっては render が非同期（設定や履歴の読み込みを待つ）。
     // 待っている間に別画面へ移ると、古い画面の要素が今の画面に紛れ込んでしまう。
@@ -40,12 +69,22 @@ const App = {
 
   back() {
     this.history.pop();
-    const prev = this.history[this.history.length - 1] || 'menu';
+    const prev = this.history[this.history.length - 1] || 'home';
     this.history.pop();
     this.go(prev);
   },
 
   setTitle(t) { this.titleEl.textContent = t; },
+
+  // 今いる画面に対応するサイドバー項目だけを選択状態にする。
+  // 「仕事を頼む」配下の各画面（メール文面作成・タスク・資料作成・翻訳など）は
+  // すべて同じ「仕事を頼む」項目を選択状態にする。
+  paintSidebar(viewName) {
+    const section = SIDEBAR_SECTIONS[viewName] || null;
+    for (const btn of this.sidebarItems) {
+      btn.classList.toggle('active', btn.dataset.view === section);
+    }
+  },
 
   toast(message) {
     const el = document.getElementById('toast');
@@ -73,4 +112,11 @@ const App = {
 document.getElementById('backBtn').addEventListener('click', () => App.back());
 document.getElementById('settingsBtn').addEventListener('click', () => App.go('settings'));
 
-App.go('menu');
+// サイドバー: ロゴでトップページへ、各項目でそれぞれの画面へ。
+const sidebarHomeBtn = document.getElementById('sidebarHome');
+if (sidebarHomeBtn) sidebarHomeBtn.addEventListener('click', () => App.go('home'));
+for (const btn of App.sidebarItems) {
+  btn.addEventListener('click', () => App.go(btn.dataset.view));
+}
+
+App.go('home');

@@ -7,15 +7,31 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <button id="backBtn" class="ghost" hidden>← 戻る</button>
-    <h1 id="pageTitle">俺の秘書子</h1>
-    <button id="settingsBtn" class="secondary">設定</button>
-  </header>
-  <main id="app"></main>
+  <div id="layout">
+    <aside id="sidebar">
+      <button id="sidebarHome" class="sidebar-logo" type="button">俺の秘書子</button>
+      <nav class="sidebar-nav">
+        <button class="sidebar-item" data-view="menu" type="button">仕事を頼む</button>
+        <button class="sidebar-item" data-view="salon" type="button">美容室</button>
+        <button class="sidebar-item" data-view="breaktime" type="button">息抜き</button>
+        <button class="sidebar-item" data-view="settings" type="button">設定</button>
+      </nav>
+    </aside>
+    <div id="mainCol">
+      <header>
+        <button id="backBtn" class="ghost" hidden>← 戻る</button>
+        <h1 id="pageTitle">俺の秘書子</h1>
+        <button id="settingsBtn" class="secondary">設定</button>
+      </header>
+      <main id="app"></main>
+    </div>
+  </div>
   <div id="toast" class="toast" hidden></div>
 
+  <script src="views/home.js"></script>
   <script src="views/menu.js"></script>
+  <script src="views/salon.js"></script>
+  <script src="views/breaktime.js"></script>
   <script src="views/mailmenu.js"></script>
   <script src="views/addressbook.js"></script>
   <script src="views/compose.js"></script>
