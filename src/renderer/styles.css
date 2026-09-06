@@ -492,13 +492,13 @@ body.home-view main {
   background-repeat: no-repeat;
 }
 
-/* 秘書子は背景内の横幅43〜60%あたりに立っている。吹き出しはその頭の上に置く。 */
-/* 秘書子は背景の中で「横52%・頭の上12%」の位置に立っている（画像から実測）。
-   吹き出しは下端をその頭の少し上に合わせ、しっぽが頭を指すようにする。 */
+/* 秘書子は背景の中で「横50.5%・頭の上11%」の位置に立っている（差し替えた
+   2400px版の画像から実測）。吹き出しは下端をその頭の少し上に合わせ、
+   しっぽが頭を指すようにする。背景を差し替えたらここも測り直すこと。 */
 .home-bubble {
   position: absolute;
-  left: 52%;
-  bottom: 89%;
+  left: 50.5%;
+  bottom: 90%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -558,6 +558,12 @@ body.home-view main {
   gap: 8px;
   max-width: min(330px, calc(100vw - 40px));
 }
+
+/* hidden 属性で隠すときは、この display:flex を必ず打ち消す。
+   ブラウザ既定の [hidden]{display:none} はクラス指定より弱く、
+   これが無いと widget.hidden = true が見た目に効かない
+   （トップページで丸枠の秘書子が消えなかった原因）。 */
+.hishoko-widget[hidden] { display: none; }
 
 /* 吹き出しが出ている間だけ、本文の右に居場所を空ける。
    画面が狭いときは詰めても仕方がないので、広いときだけにする。 */
