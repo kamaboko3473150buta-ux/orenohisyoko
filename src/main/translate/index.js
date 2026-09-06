@@ -167,11 +167,20 @@ function register({ getSettings, getUsage, saveUsage }) {
       };
     }
 
+    // 訳文が原文とまったく同じ段落には訳文を入れない。
+    // 「1」「2」のような番号だけの段落や、もともと訳す必要のない行が
+    // そのまま二重に並んでしまうのを防ぐため。
     const insertions = [];
+    let skipped = 0;
     session.chunks.forEach((chunk, ci) => {
       const texts = session.translated[ci];
       chunk.forEach((item, ii) => {
-        insertions.push({ index: item.index, xml: buildTranslatedParagraph(item.xml, texts[ii]) });
+        const translated = String(texts[ii] == null ? '' : texts[ii]);
+        if (!translated.trim() || translated.trim() === String(item.text || '').trim()) {
+          skipped += 1;
+          return;
+        }
+        insertions.push({ index: item.index, xml: buildTranslatedParagraph(item.xml, translated) });
       });
     });
     const newXml = insertAfter(session.documentXml, insertions);
@@ -211,7 +220,7 @@ function register({ getSettings, getUsage, saveUsage }) {
         outZip.addFile(entry.entryName, data);
       }
       await fs.writeFile(filePath, outZip.toBuffer());
-      return { ok: true, filePath };
+      return { ok: true, filePath, inserted: insertions.length, skipped };
     } catch (err) {
       return {
         ok: false,

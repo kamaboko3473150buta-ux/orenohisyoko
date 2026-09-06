@@ -153,3 +153,44 @@ test('insertAfterは壊れたXMLでも例外を投げない', () => {
   assert.doesNotThrow(() => insertAfter('<w:p><w:r><w:t>閉じてない', [{ index: 0, xml: '<w:p/>' }]));
   assert.doesNotThrow(() => insertAfter(null, [{ index: 0, xml: '<w:p/>' }]));
 });
+
+// 訳文の見た目（候補Bで確定）: グレー＋斜体＋原文の9割の大きさ＋前後の余白なし。
+// 余白は「w:pPr の中で pStyle や numPr より後ろ」に置かないと規格違反になる。
+// テンプレート文字列の中で \s と書くと JS が s に潰してしまい一致しなくなるので、
+// 位置がずれていないかをここで見張る。
+test('訳文はグレー・斜体・原文の9割の大きさになる', () => {
+  const src = '<w:p><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>見出し</w:t></w:r></w:p>';
+  const out = buildTranslatedParagraph(src, 'Heading');
+  assert.ok(out.includes('<w:color w:val="666666"/>'), 'グレー');
+  assert.ok(out.includes('<w:i/>'), '斜体');
+  assert.ok(out.includes('<w:sz w:val="29"/>'), '32の9割で29');
+  assert.ok(out.includes('<w:b/>'), '元の太字は残る');
+});
+
+test('文字の大きさの指定が無ければ既定10.5ptの9割になる', () => {
+  const out = buildTranslatedParagraph('<w:p><w:r><w:t>本文</w:t></w:r></w:p>', 'Body');
+  assert.ok(out.includes('<w:sz w:val="19"/>'), '21の9割で19');
+});
+
+test('訳文の段落は前後の余白が0になる', () => {
+  const src = '<w:p><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr><w:r><w:t>本文</w:t></w:r></w:p>';
+  const out = buildTranslatedParagraph(src, 'Body');
+  assert.ok(out.includes('w:before="0"') && out.includes('w:after="0"'), '余白が0');
+  assert.ok(!out.includes('w:before="240"'), '元の余白は残らない');
+});
+
+test('余白の指定は pStyle より後ろに入る（OOXMLの並び順）', () => {
+  const src = '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:jc w:val="center"/></w:pPr>'
+    + '<w:r><w:t>見出し</w:t></w:r></w:p>';
+  const out = buildTranslatedParagraph(src, 'Heading');
+  assert.ok(out.indexOf('w:pStyle') < out.indexOf('w:spacing'), 'pStyleの後');
+  assert.ok(out.indexOf('w:spacing') < out.indexOf('w:jc'), 'jcの前');
+});
+
+test('余白の指定は numPr（箇条書き）より後ろに入る', () => {
+  const src = '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'
+    + '<w:ind w:left="720"/></w:pPr><w:r><w:t>項目</w:t></w:r></w:p>';
+  const out = buildTranslatedParagraph(src, 'Item');
+  assert.ok(out.indexOf('</w:numPr>') < out.indexOf('w:spacing'), 'numPrの後');
+  assert.ok(out.indexOf('w:spacing') < out.indexOf('w:ind'), 'indの前');
+});

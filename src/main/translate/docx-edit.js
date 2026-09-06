@@ -69,23 +69,77 @@ function encodeXmlText(s) {
     .replace(/>/g, '&gt;');
 }
 
-// 既存のrPr（実行のプロパティ。太字・斜体・フォント等）を活かしつつ、文字色だけを
-// グレー(666666)に上書きしたrPrを組み立てる。既存にw:colorがあれば取り除いてから
-// 付け直す（重複させない）。rPr自体が無ければ、色だけの新規rPrを作る。
+// 既存のrPr（実行のプロパティ。太字・フォント等）を活かしつつ、訳文の見た目を
+// 「グレー(666666)＋斜体」に上書きしたrPrを組み立てる。原文と一目で見分けられるようにする
+// （印刷してグレーが薄くなっても、斜体なら区別できる）。
+// 既存の色・斜体の指定は取り除いてから付け直す（重複させない）。
 function buildGreyRPr(rPr) {
   let inner = rPr && !rPr.selfClosing ? rPr.inner : '';
   inner = inner
     .replace(/<w:color(?:\s[^>]*)?\/>/g, '')
-    .replace(/<w:color(?:\s[^>]*)?>[\s\S]*?<\/w:color>/g, '');
-  return `<w:rPr>${inner}<w:color w:val="666666"/></w:rPr>`;
+    .replace(/<w:color(?:\s[^>]*)?>[\s\S]*?<\/w:color>/g, '')
+    .replace(/<w:i(?:\s[^>]*)?\/>/g, '')
+    .replace(/<w:iCs(?:\s[^>]*)?\/>/g, '');
+  // 大きさは原文の9割にする。原文が主・訳文が従という関係が見た目で伝わり、
+  // 原文と訳文が交互に並んでも紙面が間延びしない。
+  // w:sz は「半ポイント」単位。元の指定があればその9割、無ければ既定10.5pt(21)の9割。
+  inner = inner
+    .replace(/<w:sz(?:\s[^>]*)?\/>/g, '')
+    .replace(/<w:szCs(?:\s[^>]*)?\/>/g, '');
+  const size = Math.max(12, Math.round(baseHalfPoints(rPr) * 0.9));
+  return `<w:rPr>${inner}<w:i/><w:iCs/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>`
+    + `<w:color w:val="666666"/></w:rPr>`;
+}
+
+// 元のrPrから文字の大きさ（半ポイント）を読む。指定が無ければWordの既定 10.5pt = 21。
+function baseHalfPoints(rPr) {
+  const inner = rPr && !rPr.selfClosing ? rPr.inner : '';
+  const m = inner.match(/<w:sz(?:\s[^>]*)?\sw:val="(\d+)"/);
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 21;
 }
 
 // 元の段落(<w:p>...</w:p>)をコピーし、最初の<w:r>だけを残して<w:t>を訳文に
 // 差し替えた新しい段落XMLを返す。
 // - 段落プロパティ<w:pPr>（見出し・箇条書き・配置など）は必ず引き継ぐ。
-// - 文字色はグレー(666666)にする。
+// - 見た目はグレー(666666)＋斜体にする（原文と見分けるため）。
 // - 最初の実行(run)のrPr（太字・斜体など）はそのまま活かす。
 // - 実行が1つも無い段落（見出しスタイルだけの空段落など）でも例外を投げない。
+// 訳文の段落プロパティ。元の段落プロパティ（見出し・箇条書き・配置）は引き継ぎつつ、
+// 段落の前後の余白だけを0にする。原文と訳文がひとまとまりに見え、
+// 表題まわりが間延びしなくなる（実機で「間延びして見栄えが悪い」との指摘があった）。
+const TIGHT_SPACING = '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>';
+
+// OOXMLでは w:pPr の中身の並び順が決まっており、w:spacing は
+// pStyle・numPr・pBdr・shd・tabs などより後ろに置かなければならない。
+// Wordは多少崩れても開いてくれるが、規格どおりに入れる。
+const PPR_BEFORE_SPACING = ['w:pStyle', 'w:keepNext', 'w:keepLines', 'w:pageBreakBefore',
+  'w:framePr', 'w:widowControl', 'w:numPr', 'w:suppressLineNumbers', 'w:pBdr', 'w:shd', 'w:tabs'];
+
+function buildTightPPr(pPr) {
+  if (!pPr || pPr.selfClosing) return `<w:pPr>${TIGHT_SPACING}</w:pPr>`;
+  const inner = pPr.inner.replace(/<w:spacing(?:\s[^>]*)?\/>/g, '');
+
+  // spacing より前に来るべき要素のうち、最後に現れるものの直後に差し込む。
+  // 正規表現はテンプレート文字列の中で \s と書くと JS が s に潰してしまうため、
+  // 必ず \\s と二重に書くこと（ここで一度間違えて一致しなくなった）。
+  let at = 0;
+  for (const tag of PPR_BEFORE_SPACING) {
+    const patterns = [
+      new RegExp(`<${tag}(?:\\s[^>]*)?/>`, 'g'),
+      new RegExp(`<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`, 'g'),
+    ];
+    for (const re of patterns) {
+      let m = re.exec(inner);
+      while (m) {
+        at = Math.max(at, m.index + m[0].length);
+        m = re.exec(inner);
+      }
+    }
+  }
+  return `<w:pPr>${inner.slice(0, at)}${TIGHT_SPACING}${inner.slice(at)}</w:pPr>`;
+}
+
 function buildTranslatedParagraph(originalXml, translatedText) {
   const xml = String(originalXml == null ? '' : originalXml);
   const pPr = extractFirst(xml, 'w:pPr');
@@ -94,8 +148,7 @@ function buildTranslatedParagraph(originalXml, translatedText) {
 
   const newRPr = buildGreyRPr(rPr);
   const newRun = `<w:r>${newRPr}<w:t xml:space="preserve">${encodeXmlText(translatedText)}</w:t></w:r>`;
-  const pPrXml = pPr ? pPr.full : '';
-  return `<w:p>${pPrXml}${newRun}</w:p>`;
+  return `<w:p>${buildTightPPr(pPr)}${newRun}</w:p>`;
 }
 
 // document.xml全体の中で、指定したindex（splitParagraphsが返すのと同じ番号）の
