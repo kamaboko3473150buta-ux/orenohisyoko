@@ -16,6 +16,9 @@ const SIDEBAR_SECTIONS = {
   translate: 'menu',
   salon: 'salon',
   breaktime: 'breaktime',
+  gameBabanuki: 'breaktime',
+  gameMemory: 'breaktime',
+  gameNim: 'breaktime',
   settings: 'settings',
   home: null, // トップページはサイドバーのどの項目も選択状態にしない
 };
@@ -34,6 +37,9 @@ const PARENT_VIEW = {
   tasks: 'menu',
   docgen: 'menu',
   translate: 'menu',
+  gameBabanuki: 'breaktime',
+  gameMemory: 'breaktime',
+  gameNim: 'breaktime',
   compose: 'mailmenu',
   reply: 'mailmenu',
   history: 'mailmenu',

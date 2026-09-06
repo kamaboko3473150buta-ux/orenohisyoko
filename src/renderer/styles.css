@@ -632,3 +632,87 @@ body.home-view main {
   height: 100%;
   object-fit: cover;
 }
+
+/* --- 息抜き（ミニゲーム） --- */
+
+.game-board { display: flex; flex-direction: column; gap: 18px; margin: 16px 0 4px; }
+.game-hand { display: flex; align-items: center; gap: 14px; }
+.game-hand-label {
+  width: 60px;
+  flex: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.game-cards { display: flex; gap: 12px; }
+
+/* トランプの札。表・裏・取られた札で見た目を変える */
+.pcard {
+  width: 74px;
+  height: 104px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(22, 48, 43, .12);
+}
+.pcard.red { color: #c0392b; }
+.pcard.joker { color: var(--accent); font-size: 15px; letter-spacing: .04em; }
+
+/* 裏面はボタンとして押せる。押せないときは沈ませる */
+button.pcard {
+  cursor: pointer;
+  transition: transform .12s, border-color .12s;
+}
+button.pcard:hover:not(:disabled) { transform: translateY(-4px); border-color: var(--accent); background: #fff; }
+button.pcard:disabled { cursor: default; opacity: 1; }
+.pcard.back {
+  background: repeating-linear-gradient(45deg, var(--accent) 0 6px, var(--accent-hover) 6px 12px);
+  color: rgba(255, 255, 255, .85);
+  border-color: var(--accent);
+}
+button.pcard.back:hover:not(:disabled) { background: repeating-linear-gradient(45deg, var(--accent-hover) 0 6px, var(--accent) 6px 12px); }
+
+/* .card p が「クラス＋要素」で強いため、こちらも要素名を付けて上書きする */
+.card p.game-status { margin: 12px 0 0; font-size: 14px; color: var(--text); min-height: 1.6em; }
+.card p.game-status.win { color: var(--accent); font-weight: 600; }
+.card p.game-status.lose { color: #c0392b; font-weight: 600; }
+.card p.game-score { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.game-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.game-actions button { flex: none; }
+
+/* 神経衰弱の盤面。8組16枚を4列で並べる */
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 74px);
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+.memory-cell { width: 74px; height: 88px; font-size: 18px; }
+.memory-cell.taken-you { background: var(--accent-weak); border-color: var(--accent); opacity: .75; }
+.memory-cell.taken-hishoko { background: #f1efe9; border-color: var(--line); opacity: .55; }
+
+/* クリップ取り。取ると数が減るだけなので、粒が見えることが大事 */
+.clip-pile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0 6px;
+  min-height: 84px;
+  align-content: flex-start;
+  max-width: 420px;
+}
+.clip { font-size: 26px; line-height: 1; }
+.game-hand-empty {
+  display: flex;
+  align-items: center;
+  height: 104px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
