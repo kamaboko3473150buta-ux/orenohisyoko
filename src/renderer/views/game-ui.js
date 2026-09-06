@@ -22,10 +22,16 @@ window.GameUI = (function () {
     const bubble = App.h('div', { class: 'scene-bubble' }, [bubbleText]);
     bubble.hidden = true;
 
+    // 負けたときの顔。卓の写真は1枚きりで表情が変わらないので、
+    // 別に描いてもらった「ムッとした顔」を手前に寄せて出す（カットイン）。
     // index.html（src/renderer/）から見て assets/ はリポジトリ直下にある。
-    const figure = App.h('div', { class: 'scene-figure' }, [bubble]);
+    const cutin = App.h('img', { class: 'scene-cutin', src: '../../assets/games/hishoko-sulk.jpg', alt: '' });
+    cutin.hidden = true;
+    cutin.addEventListener('error', () => { cutin.hidden = true; });
+
+    const figure = App.h('div', { class: 'scene-figure' }, [cutin, bubble]);
     const table = App.h('div', { class: 'scene-table' });
-    const el = App.h('div', { class: `scene${opts.wide ? ' scene-wide' : ''}` }, [figure, table]);
+    const el = App.h('div', { class: 'scene' }, [figure, table]);
 
     return {
       el,
@@ -33,6 +39,10 @@ window.GameUI = (function () {
       say(text) {
         bubbleText.textContent = text || '';
         bubble.hidden = !text;
+      },
+      // face('sulk') で負けたときの顔、face(null) でふだんの写真に戻す。
+      face(kind) {
+        cutin.hidden = kind !== 'sulk';
       },
     };
   }
@@ -57,8 +67,12 @@ window.GameUI = (function () {
     const face = App.h('span', { class: cls.join(' ') });
     if (!card) return face;
     if (Cards.isJoker(card)) {
+      // 中央は★と小さな JOKER の2段。縦書きにすると小さい札で文字が切れる。
       face.appendChild(corner('JK', '★'));
-      face.appendChild(App.h('span', { class: 'ppip ppip-joker', text: 'JOKER' }));
+      face.appendChild(App.h('span', { class: 'ppip ppip-joker' }, [
+        App.h('span', { class: 'ppip-star', text: '★' }),
+        App.h('span', { class: 'ppip-word', text: 'JOKER' }),
+      ]));
       face.appendChild(corner('JK', '★'));
       return face;
     }

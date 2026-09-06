@@ -45,7 +45,7 @@ window.Play = {
 
 const GAMES = [
   { view: 'gameBabanuki', title: '🃏 ババ抜き（最後の1枚）', desc: '2枚対1枚の最終局面だけを何度でも。秘書子のクセを読めますか' },
-  { view: 'gameMemory', title: '🂠 神経衰弱', desc: '8組16枚。秘書子はときどき忘れます' },
+  { view: 'gameMemory', title: '🂠 神経衰弱', desc: '12組24枚。秘書子はときどき忘れます' },
   { view: 'gameNim', title: '📎 クリップ取り', desc: '交互に1〜3個。最後の1個を取ったほうが負け' },
 ];
 

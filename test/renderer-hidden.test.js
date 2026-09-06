@@ -15,7 +15,7 @@ const cssPath = path.join(__dirname, '..', 'src', 'renderer', 'styles.css');
 const css = fs.readFileSync(cssPath, 'utf8');
 
 // JS から el.hidden で出し入れしている、画面に常駐する要素たち。
-const HIDDEN_TOGGLED = ['.hishoko-widget', '.hishoko-bubble', '.toast', '.scene-bubble'];
+const HIDDEN_TOGGLED = ['.hishoko-widget', '.hishoko-bubble', '.toast', '.scene-bubble', '.scene-cutin'];
 
 // コメントを取り除いたうえで「セレクタ { 宣言 }」をすべて拾い、
 // セレクタが完全一致するものの宣言部だけを返す（.a と .a[hidden] は別物として扱う）。

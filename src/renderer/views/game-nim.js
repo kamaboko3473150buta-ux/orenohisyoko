@@ -39,6 +39,7 @@ Views.gameNim = {
         actionRow.appendChild(App.h('button', {
           class: 'secondary', text: '息抜きに戻る', onclick: () => App.go('breaktime'),
         }));
+        scene.face(won ? 'sulk' : null);
         scene.say(won ? '取らされました。数え間違いです……' : 'いただきました。手が見えていました。');
         return;
       }
@@ -81,6 +82,7 @@ Views.gameNim = {
 
     function newGame() {
       busy = false;
+      scene.face(null);
       state = Nim.start({ rng: Math.random });
       paint();
       scene.say(`${state.remaining}個あります。お先にどうぞ。`);
