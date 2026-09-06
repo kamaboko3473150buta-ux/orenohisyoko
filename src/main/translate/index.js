@@ -8,6 +8,7 @@
 // 「◯/◯ を翻訳中…」の進捗を出せる）→ すべて終わったら save（初めてWordの中身を書き換えて
 // 別名で保存）。途中で1回でも失敗したらsaveは呼ばれない＝一部だけ訳した文書は絶対に作らない。
 
+const fs = require('node:fs/promises');
 const path = require('node:path');
 const AdmZip = require('adm-zip');
 const { ipcMain, dialog, BrowserWindow } = require('electron');
@@ -198,8 +199,18 @@ function register({ getSettings, getUsage, saveUsage }) {
     }
 
     try {
-      session.zip.updateFile('word/document.xml', Buffer.from(newXml, 'utf8'));
-      await session.zip.writeZipPromise(filePath);
+      // updateFile + writeZipPromise は adm-zip の中で圧縮に失敗し
+      // 「Invalid LOC header (bad signature)」になる（実機で発生）。
+      // 元のエントリを展開して新しい zip に詰め直す方式にすると確実に書ける。
+      const outZip = new AdmZip();
+      for (const entry of session.zip.getEntries()) {
+        if (entry.isDirectory) continue;
+        const data = entry.entryName === 'word/document.xml'
+          ? Buffer.from(newXml, 'utf8')
+          : entry.getData();
+        outZip.addFile(entry.entryName, data);
+      }
+      await fs.writeFile(filePath, outZip.toBuffer());
       return { ok: true, filePath };
     } catch (err) {
       return {
