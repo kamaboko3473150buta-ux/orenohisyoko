@@ -59,6 +59,7 @@ Views.docgen = {
       attachments: [], // { ok, name, chars, originalChars, truncated, error, text }
       imageCount: 0, // 添付から抽出できた画像の枚数（プレゼン資料でのみ使う）
       draftId: '', // 下書きのid。同じ下書きを上書きするために覚えておく
+      fieldValues: {}, // 種類ごとの入力項目（任意）。AIを通さずそのまま資料に入る
       outline: null, // 通常: { title, sections: [{ heading, points }] } / プレゼン: deck
       doc: null, // 通常: { title, sections: [{ heading, paragraphs, bullets }] } / プレゼン: deck
     };
@@ -76,6 +77,7 @@ Views.docgen = {
         typeId: state.typeId,
         brief: state.brief,
         format: state.format,
+        fieldValues: state.fieldValues,
         // 中身ではなく場所だけを残す（他人の資料をアプリに溜め込まないため）
         filePaths: state.attachments.filter((a) => a.ok && a.path).map((a) => a.path),
         outline: state.outline,
@@ -132,6 +134,32 @@ Views.docgen = {
       });
       briefInput.value = state.brief;
       briefInput.addEventListener('input', () => { state.brief = briefInput.value; });
+
+      // 種類ごとの入力項目。すべて任意で、書かなければ今までどおり動く。
+      // ここに入れた値はAIを通さず、そのまま資料に入る（日時や宛先を作られないため）。
+      const fieldsHost = App.h('div', { class: 'doc-fields' });
+
+      function renderFields() {
+        fieldsHost.innerHTML = '';
+        const list = findType(state.typeId).fields || [];
+        if (!list.length) {
+          fieldsHost.hidden = true;
+          return;
+        }
+        fieldsHost.hidden = false;
+        for (const f of list) {
+          const input = f.multiline
+            ? App.h('textarea', { placeholder: f.placeholder || '', rows: 3 })
+            : App.h('input', { type: 'text', placeholder: f.placeholder || '' });
+          input.value = state.fieldValues[f.id] || '';
+          input.addEventListener('input', () => { state.fieldValues[f.id] = input.value; });
+          fieldsHost.appendChild(App.h('div', { class: 'field' }, [
+            App.h('label', { text: f.label }),
+            input,
+          ]));
+        }
+      }
+      renderFields();
 
       const pickBtn = App.h('button', { class: 'secondary', text: 'ファイルを選ぶ' });
       const attachList = App.h('div', { class: 'attach-list' });
@@ -258,6 +286,7 @@ Views.docgen = {
           brief: state.brief,
           sources: okAttachments.map((a) => ({ name: a.name, text: a.text })),
           model: modelSelect.value,
+          fieldValues: state.fieldValues,
         });
 
         outlineBtn.disabled = false;
@@ -330,6 +359,7 @@ Views.docgen = {
         state.draftId = res.draft.id;
         state.typeId = res.draft.typeId;
         state.brief = res.draft.brief;
+        state.fieldValues = res.draft.fieldValues || {};
         state.format = res.draft.format || findType(state.typeId).defaultFormat;
         state.attachments = res.attachments;
         state.outline = res.draft.outline;
@@ -363,6 +393,7 @@ Views.docgen = {
             App.h('label', { text: '(2) 何を作りたいか' }),
             briefInput,
           ]),
+          fieldsHost,
           App.h('div', { class: 'field' }, [
             App.h('label', { text: '(3) 参考資料（複数可）' }),
             App.h('div', { class: 'actions' }, [pickBtn]),

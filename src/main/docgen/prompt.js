@@ -168,11 +168,33 @@ function buildOutlineSystemPrompt(typeId) {
   return buildDocSystemPrompt(typeId);
 }
 
-function buildOutlineUserPrompt({ typeId, brief, sources, today } = {}) {
+// 種類ごとの入力項目から、AIに渡す部分を作る。
+// 「入力済み」は作らせないため、「条件」は判断の材料として渡すため。
+// 入力済みの値そのものは渡さない。渡す必要が無くトークンの無駄になるうえ、
+// AIが言い換えてしまう余地を残さないため（値は生成後にそのまま差し込む）。
+function formatFieldNotes({ supplied, hints } = {}) {
+  const lines = [];
+  const names = (Array.isArray(supplied) ? supplied : []).filter(Boolean);
+  if (names.length) {
+    lines.push(`【利用者が入力済みの項目】${names.join('・')}`);
+    lines.push('これらは利用者の入力をそのまま使うので、metaにも本文にも書かないこと。');
+  }
+  const hintList = (Array.isArray(hints) ? hints : []).filter(Boolean);
+  if (hintList.length) {
+    lines.push('【作るときの条件】');
+    for (const h of hintList) lines.push(`- ${h}`);
+  }
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+function buildOutlineUserPrompt({
+  typeId, brief, sources, today, supplied, hints,
+} = {}) {
   const type = findDocType(typeId);
   return [
     `【今日の日付】${clean(today)}`,
     '',
+    formatFieldNotes({ supplied, hints }),
     `【作りたい資料の種類】${type.label}`,
     '',
     '【依頼内容】',
@@ -242,11 +264,14 @@ function formatOutline(outline) {
 
 // today は実装計画のサンプルには明記されていないが、設計書 4-5c の表で本文の入力は
 // 「構成案の入力＋確定した構成」（＝今日の日付を含む）とされているため、ここでも含める。
-function buildBodyUserPrompt({ typeId, brief, sources, outline, today } = {}) {
+function buildBodyUserPrompt({
+  typeId, brief, sources, outline, today, supplied, hints,
+} = {}) {
   const type = findDocType(typeId);
   return [
     `【今日の日付】${clean(today)}`,
     '',
+    formatFieldNotes({ supplied, hints }),
     `【作りたい資料の種類】${type.label}`,
     '',
     '【依頼内容】',
@@ -399,10 +424,13 @@ function buildSlideOutlineSystemPrompt() {
   return buildSlideSystemPrompt();
 }
 
-function buildSlideOutlineUserPrompt({ brief, sources, imageCount, today } = {}) {
+function buildSlideOutlineUserPrompt({
+  brief, sources, imageCount, today, supplied, hints,
+} = {}) {
   return [
     `【今日の日付】${clean(today)}`,
     '',
+    formatFieldNotes({ supplied, hints }),
     '【作りたい資料の種類】プレゼン資料（スライド）',
     '',
     '【依頼内容】',
@@ -430,10 +458,13 @@ function buildSlideBodySystemPrompt() {
   return buildSlideSystemPrompt();
 }
 
-function buildSlideBodyUserPrompt({ brief, sources, outline, imageCount } = {}) {
+function buildSlideBodyUserPrompt({
+  brief, sources, outline, imageCount, supplied, hints,
+} = {}) {
   return [
     '【作りたい資料の種類】プレゼン資料（スライド）',
     '',
+    formatFieldNotes({ supplied, hints }),
     '【依頼内容】',
     clean(brief) || '（依頼内容の入力はありません）',
     '',
@@ -570,6 +601,7 @@ function parseDeckJson(raw) {
 }
 
 module.exports = {
+  formatFieldNotes,
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
   buildBodySystemPrompt, buildBodyUserPrompt, parseBodyJson,
   buildSlideOutlineSystemPrompt, buildSlideOutlineUserPrompt,

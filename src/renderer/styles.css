@@ -1068,3 +1068,13 @@ body.game-view main {
 }
 .draft-note { font-size: 12px; color: var(--muted); }
 .draft-row button { flex: 0 0 auto; }
+
+/* 種類ごとの入力項目。用件のすぐ下に、2列で並べる */
+.doc-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 14px;
+  margin-bottom: 12px;
+}
+.doc-fields[hidden] { display: none; }
+.doc-fields textarea { min-height: 66px; }

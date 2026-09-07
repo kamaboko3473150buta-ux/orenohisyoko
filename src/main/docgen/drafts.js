@@ -44,6 +44,8 @@ function normalizeDraft(raw) {
     brief: safeText(r.brief),
     format: safeText(r.format),
     filePaths: (Array.isArray(r.filePaths) ? r.filePaths : []).map((p) => safeText(p)).filter(Boolean),
+    // 種類ごとの入力項目（日時・宛先など）。作りかけの一部なので一緒に残す。
+    fieldValues: r.fieldValues && typeof r.fieldValues === 'object' ? r.fieldValues : {},
     // 作りかけの構成案・本文。無ければ null（入力だけの下書き）。
     outline: r.outline && typeof r.outline === 'object' ? r.outline : null,
     doc: r.doc && typeof r.doc === 'object' ? r.doc : null,

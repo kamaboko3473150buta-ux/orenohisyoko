@@ -11,6 +11,7 @@ const { DOC_TYPES } = require('./types');
 const { readFiles } = require('./readers');
 const scannedPdf = require('./scanned-pdf');
 const drafts = require('./drafts');
+const fields = require('./fields');
 const { extractImages, MAX_IMAGES } = require('./images');
 const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
@@ -97,7 +98,10 @@ function register({
   getSettings, getUsage, saveUsage, getDocDrafts, saveDocDrafts,
 }) {
   // 資料の種類一覧（チップの表示・guideの埋め込みに使う）
-  ipcMain.handle('doc:types', () => ({ types: DOC_TYPES }));
+  // 種類ごとの入力項目も一緒に返す（画面が種類を選んだときに欄を出し分けるため）。
+  ipcMain.handle('doc:types', () => ({
+    types: DOC_TYPES.map((t) => ({ ...t, fields: fields.fieldsFor(t.id) })),
+  }));
 
   // 参考資料のファイル選択（複数選択可）
   ipcMain.handle('doc:pickFiles', async (event) => {
@@ -214,17 +218,24 @@ function register({
   // 構成案を作る（1回目のAPI呼び出し）。プレゼン資料だけは専用のプロンプト・解析を使う
   // （レポート等の {title, sections} とは別の deck 形式 {title, subtitle, slides} のため）。
   ipcMain.handle('doc:outline', async (_e, {
-    typeId, brief, sources, model,
+    typeId, brief, sources, model, fieldValues,
   } = {}) => {
     const isSlide = typeId === 'presentation';
     const settings = getSettings();
     const scanned = await scannedPdf.collect(scannedSession);
+    // 入力済みの項目は「作らないで」と伝え、判断が要る条件だけを渡す
+    const supplied = fields.suppliedLabels(typeId, fieldValues);
+    const hints = fields.hintsFromValues(typeId, fieldValues);
     const result = await generateText({
       apiKey: settings.apiKey,
       system: isSlide ? buildSlideOutlineSystemPrompt() : buildOutlineSystemPrompt(typeId),
       user: isSlide
-        ? buildSlideOutlineUserPrompt({ brief, sources, imageCount: imageSession.images.length, today: todayYmd() })
-        : buildOutlineUserPrompt({ typeId, brief, sources, today: todayYmd() }),
+        ? buildSlideOutlineUserPrompt({
+          brief, sources, imageCount: imageSession.images.length, today: todayYmd(), supplied, hints,
+        })
+        : buildOutlineUserPrompt({
+          typeId, brief, sources, today: todayYmd(), supplied, hints,
+        }),
       maxTokens: OUTLINE_MAX_TOKENS,
       // 文字が入っていないPDFは、そのものを添えてAIに読ませる
       documents: scanned.documents,
@@ -250,20 +261,22 @@ function register({
 
   // 確定した構成案から本文を作る（2回目のAPI呼び出し）
   ipcMain.handle('doc:body', async (_e, {
-    typeId, brief, sources, outline, model,
+    typeId, brief, sources, outline, model, fieldValues,
   } = {}) => {
     const isSlide = typeId === 'presentation';
     const settings = getSettings();
     const scanned = await scannedPdf.collect(scannedSession);
+    const supplied = fields.suppliedLabels(typeId, fieldValues);
+    const hints = fields.hintsFromValues(typeId, fieldValues);
     const result = await generateText({
       apiKey: settings.apiKey,
       system: isSlide ? buildSlideBodySystemPrompt() : buildBodySystemPrompt(typeId),
       user: isSlide
         ? buildSlideBodyUserPrompt({
-          brief, sources, outline, imageCount: imageSession.images.length,
+          brief, sources, outline, imageCount: imageSession.images.length, supplied, hints,
         })
         : buildBodyUserPrompt({
-          typeId, brief, sources, outline, today: todayYmd(),
+          typeId, brief, sources, outline, today: todayYmd(), supplied, hints,
         }),
       maxTokens: BODY_MAX_TOKENS,
       documents: scanned.documents,
@@ -279,7 +292,8 @@ function register({
       return { ok: true, doc: deck, failed };
     }
     const { doc, failed } = parseBodyJson(result.body);
-    return { ok: true, doc, failed };
+    // 入力した項目は、AIの出力ではなく利用者の値をそのまま入れる（表記を変えないため）。
+    return { ok: true, doc: fields.applyToDoc(doc, typeId, fieldValues), failed };
   });
 
   // 完成した資料をファイルに保存する。
