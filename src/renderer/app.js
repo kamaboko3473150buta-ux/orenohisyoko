@@ -47,10 +47,12 @@ const PARENT_VIEW = {
   preview: 'mailmenu',
 };
 
-// 秘書子を画面の中に自前で描く画面。ここでは右下の常駐ウィジェットを出さない
-// （トップは背景の中に立っていて、対戦中は卓の対面に座っている。二重に出すと
-//  同じ人が2人いることになる）。
-const OWN_HISHOKO = ['home', 'gameBabanuki', 'gameMemory', 'gameNim'];
+// 右下の常駐秘書子を出さない画面。
+// - home・対戦画面 … 画面の中に秘書子を自前で描いている（トップは背景の中に立ち、
+//   対戦中は卓の対面に座っている）。二重に出すと同じ人が2人いることになる
+// - settings … 今後ここで「秘書子以外の人物（執事など）」に切り替えられるようにする予定。
+//   誰にするかを決めている画面に本人が居座っているのは筋が通らない
+const NO_HISHOKO = ['home', 'gameBabanuki', 'gameMemory', 'gameNim', 'settings'];
 
 const App = {
   el: document.getElementById('app'),
@@ -70,13 +72,15 @@ const App = {
     // 対戦画面は「秘書子の手札」と「自分の手札」が同時に見えないと遊べないので、
     // 下の余白を詰めて1画面に収める。
     document.body.classList.toggle('game-view', viewName.startsWith('game'));
+    // 秘書子が出ない画面では、右に空けておいた居場所も要らない
+    document.body.classList.toggle('no-hishoko', NO_HISHOKO.includes(viewName));
     this.paintSidebar(viewName);
 
     // 画面を移ったら秘書子はいったん既定（微笑・吹き出しなし）に戻す。
     // 伝えることがある画面は、このあと自分で say() して上書きする。
     if (window.Hishoko) {
       Hishoko.reset();
-      if (OWN_HISHOKO.includes(viewName)) Hishoko.hide(); else Hishoko.show();
+      if (NO_HISHOKO.includes(viewName)) Hishoko.hide(); else Hishoko.show();
     }
 
     // 画面によっては render が非同期（設定や履歴の読み込みを待つ）。

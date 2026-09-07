@@ -148,6 +148,9 @@ main {
   margin: 0;
 }
 
+/* 秘書子が出ない画面（設定など）では、空けておいた居場所を本文に返す */
+body.no-hishoko main { max-width: 880px; }
+
 /* --- カード --- */
 
 .card {
