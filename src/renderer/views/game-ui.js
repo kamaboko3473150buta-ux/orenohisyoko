@@ -21,7 +21,7 @@ window.GameUI = (function () {
   // 写真を差し替えたら測り直すこと。
   const MOODS = ['idle', 'sulk', 'joy'];
 
-  function scene() {
+  function scene(opts = {}) {
     const bubbleText = App.h('p', {});
     const bubble = App.h('div', { class: 'scene-bubble' }, [bubbleText]);
     bubble.hidden = true;
@@ -40,7 +40,7 @@ window.GameUI = (function () {
     figure.appendChild(bubble);
 
     const table = App.h('div', { class: 'scene-table' });
-    const el = App.h('div', { class: 'scene mood-idle' }, [figure, table]);
+    const el = App.h('div', { class: `scene mood-idle${opts.wide ? ' scene-wide' : ''}` }, [figure, table]);
 
     return {
       el,

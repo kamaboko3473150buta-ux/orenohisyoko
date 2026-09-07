@@ -7,7 +7,7 @@ Views.gameNim = {
   render(root) {
     App.setTitle('クリップ取り');
 
-    const scene = GameUI.scene();
+    const scene = GameUI.scene({ wide: true });
     const scatter = App.h('div', { class: 'clip-scatter' });
     const note = GameUI.note();
     const actionRow = App.h('div', { class: 'game-actions' });

@@ -646,39 +646,53 @@ body.home-view main {
 
 /* 卓。上半分は写真（オフィスと、向かいに座っている秘書子）、
    その下に木目を継ぎ足して札を並べる場所にする。
-   写真の天板だけでは24枚を並べる高さが足りないため。
+   写真の天板だけでは札を並べる高さが足りないため。
 
    写真は3枚（ふだん・悔しい・嬉しい）を勝敗で丸ごと差し替える。
-   3枚は「天板が木目だけになる行」の位置が違うので、拡大率(--zoom)と
-   上の切り落とし量(--shift)、継ぎ目の色(--wood-*)を1枚ずつ実測して持たせる。
-   --k は「見せる高さ ÷ 幅」。3枚とも人物が切れない最小値として .545 を採った
-   （これを大きくすると卓が縦に伸び、小さくすると人物の頭や手が切れる）。
-   写真を差し替えたら、この4つを測り直すこと。 */
+   3枚は「天板が木目だけになる行」の位置が違う（手や腕の下ろし方が違う）ので、
+   拡大率(--zoom)・継ぎ目より下の余り(--under)・継ぎ目の色(--wood-*)を
+   1枚ずつ実測して持たせる。写真を差し替えたら測り直すこと。
+
+   写真は**下端を基準に**置く。こうすると卓の高さが変わっても継ぎ目は動かず、
+   上（天井や頭の上）が余分に切れるだけで済む。ウィンドウが低いときに
+   縦スクロールを出さずに縮められるようにするため。 */
 .scene {
-  --k: .545;
+  --max: 800px;             /* ゲームごとの上限幅。神経衰弱とクリップ取りは天板が低いぶん広くできる */
+  --chrome: 166px;          /* ヘッダー・余白・遊び方の1行・ボタン列など、卓以外が使う高さ */
   --zoom: 100%;
-  --shift: 2.34%;
+  --under: 18.89%;
   --wood-top: #77594e;
   --wood-bottom: #70473a;
-  width: min(100%, 650px);
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--max));
+  max-height: calc(100vh - var(--chrome));
   margin: 4px auto 0;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 12px 28px rgba(22, 48, 43, .26);
 }
-.scene.mood-sulk { --zoom: 105.44%; --shift: 23.09%; --wood-top: #5c3c2f; --wood-bottom: #543128; }
-.scene.mood-joy  { --zoom: 105.44%; --shift: 14.57%; --wood-top: #725648; --wood-bottom: #57342a; }
+.scene-wide { --max: 880px; }
+.scene.mood-sulk { --zoom: 105.44%; --under: 11.47%; --wood-top: #5c3c2f; --wood-bottom: #543128; }
+.scene.mood-joy  { --zoom: 105.44%; --under: 16.20%; --wood-top: #725648; --wood-bottom: #57342a; }
 
+/* 写真を出す窓。ふだんは幅の .545 倍の高さ（3枚とも人物が切れない最小値）。
+   画面が低いときはここが縮み、写真の上のほうが切れる。 */
 .scene-figure {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 1 / var(--k);
+  flex: 1 1 auto;
+  min-height: 90px;
+  aspect-ratio: 1 / .545;
   background: #dfe6ea;   /* 写真が読めないときの下地（オフィスの壁の色） */
 }
+/* 下端そろえ。margin の % は「入れ物の幅」に対する割合なので、
+   高さが変わっても継ぎ目の位置がずれない。 */
 .scene-photo {
   position: absolute;
   left: 50%;
-  top: calc(-1 * var(--shift));
+  bottom: 0;
+  margin-bottom: calc(-1 * var(--under));
   width: var(--zoom);      /* 写真の左右の枠を切り落とすぶんだけ広げる */
   transform: translateX(-50%);
   display: block;
@@ -686,11 +700,13 @@ body.home-view main {
 /* クラスで display を指定する要素は、hidden を必ず打ち消す
    （既定の [hidden]{display:none} はクラス指定に負ける） */
 .scene-photo[hidden] { display: none; }
-.scene-photo.sulk { --zoom: 105.44%; --shift: 23.09%; }
-.scene-photo.joy  { --zoom: 105.44%; --shift: 14.57%; }
+.scene-photo.sulk { --zoom: 105.44%; --under: 11.47%; }
+.scene-photo.joy  { --zoom: 105.44%; --under: 16.20%; }
 
 /* 写真の天板のつづき。ここに札や駒を置く */
 .scene-table {
+  position: relative;   /* 「あなた」の名札を左端に置くため */
+  flex: 0 0 auto;
   padding: 12px 16px;
   background:
     repeating-linear-gradient(180deg, rgba(0, 0, 0, .05) 0 1px, rgba(255, 255, 255, .022) 1px 3px, transparent 3px 11px),
@@ -731,14 +747,17 @@ body.home-view main {
   justify-content: center;
   align-items: center;
   gap: 14px;
-  min-height: 97px;
+  min-height: 86px;
 }
-.seat-cards .pcard, .seat-cards .pslot { width: 70px; height: 97px; }
-.seat-cards .ppip { font-size: 30px; }
+.seat-cards .pcard, .seat-cards .pslot { width: 62px; height: 86px; }
+.seat-cards .ppip { font-size: 27px; }
 .seat-label {
   display: block;
-  width: 104px;
-  margin: 7px auto 0;
+  /* 天板の左端に寄せる。行として置くと、そのぶん卓が縦に伸びてしまう */
+  position: absolute;
+  left: 16px;
+  bottom: 46px;
+  width: 68px;
   text-align: center;
   font-size: 11.5px;
   letter-spacing: .1em;
@@ -862,18 +881,25 @@ button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 .table-note.win { color: #b6f0cd; font-weight: 600; }
 .table-note.lose { color: #ffcdc3; font-weight: 600; }
 
-.game-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 12px; }
+.game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+  min-height: 34px;   /* 決着でボタンが出ても卓が動かないよう常に空けておく */
+}
 .game-actions button { flex: none; }
 
 /* --- 神経衰弱の盤面 --- */
 
 .memory-area { display: flex; justify-content: center; align-items: flex-start; gap: 18px; }
-.memory-grid { display: grid; grid-template-columns: repeat(8, 52px); gap: 8px; }
-.memory-grid .pcard { width: 52px; height: 72px; }
-.memory-grid .pcard .ppip { font-size: 23px; }
+.memory-grid { display: grid; grid-template-columns: repeat(8, 48px); gap: 8px; }
+.memory-grid .pcard { width: 48px; height: 66px; }
+.memory-grid .pcard .ppip { font-size: 21px; }
 .memory-grid .pcard .pcorner { font-size: 11px; }
 .memory-grid .pcard .pcorner-suit { font-size: 10px; }
-.memory-grid .pslot { width: 52px; height: 72px; }
+.memory-grid .pslot { width: 48px; height: 66px; }
 .memory-side { display: flex; flex-direction: column; gap: 12px; padding-top: 2px; }
 
 /* 取った組は実際に重ねて置く。数字だけより、取った量が目で分かる */
@@ -918,7 +944,7 @@ button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 
 /* 盤面のマス。札は置いたまま、取られたら消える（取った人の山に移った見え方）。
    下に敷いたへこみが残るので、どこに何枚あったかが分かる。 */
-.memory-slot { position: relative; width: 52px; height: 72px; }
+.memory-slot { position: relative; width: 48px; height: 66px; }
 .memory-slot .pslot { position: absolute; inset: 0; width: 100%; height: 100%; }
 .memory-slot .pcard {
   position: absolute;
@@ -932,12 +958,17 @@ button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 /* 秘書子側とあなた側のあいだ。卓の中央線 */
 .table-middle {
   height: 1px;
-  margin: 6px 14%;
+  margin: 5px 16%;
   background: rgba(255, 255, 255, .12);
 }
 
 /* 対戦画面は1画面に収めたいので下の余白を詰める */
-body.game-view main { padding-bottom: 14px; }
+body.game-view main {
+  padding-bottom: 14px;
+  /* 対戦画面は卓を本文欄の幅に縛らず、サイドバーの右いっぱいを使って中央に置く。
+     max-width のままだと卓が左に寄り、右側だけ余白が残る。 */
+  max-width: none;
+}
 
 /* 息抜きの入口。ボードゲームカフェの絵を敷いて、仕事の画面と気分を変える */
 .breaktime-hero {

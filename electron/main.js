@@ -19,7 +19,9 @@ const PATHS = makePaths(app.getPath('userData'));
 function createWindow() {
   const win = new BrowserWindow({
     width: 1140,
-    height: 800,
+    // 高さ880は「息抜きの卓（写真＋札を並べる天板）が縦スクロールなしで収まる」
+    // ために必要な最小限。ここを縮めると写真の上（秘書子の頭）が切れる。
+    height: 880,
     title: '俺の秘書子',
     // 開発中（npm start）のウィンドウ左上・タスクバー用。
     // パッケージ後は exe に埋め込んだアイコンが使われる。
