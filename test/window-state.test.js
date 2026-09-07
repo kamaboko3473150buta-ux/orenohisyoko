@@ -5,7 +5,8 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { resolveBounds, boundsToSave, MIN_SIZE } = require('../src/main/window-state');
 
-const SMALL = { x: 0, y: 0, width: 1280, height: 672 };   // 1280x720 の画面
+const SMALL = { x: 0, y: 0, width: 1280, height: 672 };   // 1280x720 の画面の作業領域
+const SMALL_FULL = { x: 0, y: 0, width: 1280, height: 720 };
 const BIG = { x: 0, y: 0, width: 2560, height: 1400 };
 
 test('保存が無ければ既定の大きさ。ただし画面に収まるまで詰める', () => {
@@ -24,8 +25,22 @@ test('前に閉じたときの形をそのまま使う', () => {
 });
 
 test('画面より大きい形が残っていても、画面に収める', () => {
-  const b = resolveBounds({ width: 3000, height: 2000, x: 0, y: 0 }, SMALL);
-  assert.ok(b.width <= SMALL.width && b.height <= SMALL.height);
+  const b = resolveBounds({ width: 3000, height: 2000, x: 0, y: 0 }, SMALL, SMALL_FULL);
+  assert.ok(b.width <= SMALL_FULL.width && b.height <= SMALL_FULL.height);
+});
+
+test('自分で決めた大きさは、作業領域を少し超えていてもそのまま使う', () => {
+  // タスクバーに少しかぶる高さ(678)に合わせて閉じた場合。ここで詰めると
+  // 「合わせたはずの大きさが次に開くと変わる」ことになる。
+  assert.deepStrictEqual(
+    resolveBounds({ width: 1043, height: 678, x: 100, y: 0 }, SMALL, SMALL_FULL),
+    { width: 1043, height: 678, x: 100, y: 0 }
+  );
+});
+
+test('保存が無いときの既定値は、作業領域の内側に収める', () => {
+  const b = resolveBounds(null, SMALL, SMALL_FULL);
+  assert.ok(b.height < SMALL.height, '既定値は作業領域より内側');
 });
 
 test('小さすぎる形は下限まで戻す（操作できなくなるため）', () => {

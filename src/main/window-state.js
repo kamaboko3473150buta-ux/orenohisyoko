@@ -14,10 +14,15 @@ function toFinite(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-// 保存されていた形と、いまの画面の作業領域から、実際に使う形を決める。
-// - 大きさは作業領域に収まるまで詰める（下限あり）
+// 保存されていた形と、いまの画面から、実際に使う形を決める。
+// - **自分で決めた大きさは画面いっぱいまで尊重する**。作業領域からわずかに
+//   はみ出す形（タスクバーに少しかぶるなど）も、本人が決めたなら戻さない。
+//   ここで詰めると「合わせたはずの大きさが次に開くと変わる」ことになる
+// - 保存が無いときの既定値だけは、作業領域から少し内側に収める
 // - 位置は画面の外に出ていたら捨てて中央に置く（別モニタで保存した値の持ち越し対策）
-function resolveBounds(saved, workArea) {
+//
+// screenBounds を渡さなければ workArea を上限として使う。
+function resolveBounds(saved, workArea, screenBounds) {
   const area = {
     x: toFinite(workArea && workArea.x) || 0,
     y: toFinite(workArea && workArea.y) || 0,
@@ -26,18 +31,30 @@ function resolveBounds(saved, workArea) {
     height: toFinite(workArea && workArea.height) || Number.POSITIVE_INFINITY,
   };
 
+  const savedWidth = toFinite(saved && saved.width);
+  const savedHeight = toFinite(saved && saved.height);
+  const hasSaved = Boolean(savedWidth && savedHeight);
+
+  // 上限。保存された大きさは画面いっぱいまで、既定値は作業領域の内側まで。
+  const limit = hasSaved
+    ? {
+      width: toFinite(screenBounds && screenBounds.width) || area.width,
+      height: toFinite(screenBounds && screenBounds.height) || area.height,
+    }
+    : { width: area.width - MARGIN, height: area.height - MARGIN };
+
   const wanted = {
-    width: toFinite(saved && saved.width) || DEFAULT_SIZE.width,
-    height: toFinite(saved && saved.height) || DEFAULT_SIZE.height,
+    width: savedWidth || DEFAULT_SIZE.width,
+    height: savedHeight || DEFAULT_SIZE.height,
   };
 
   const width = Math.max(
-    Math.min(MIN_SIZE.width, area.width),
-    Math.min(Math.round(wanted.width), area.width - MARGIN)
+    Math.min(MIN_SIZE.width, limit.width),
+    Math.min(Math.round(wanted.width), limit.width)
   );
   const height = Math.max(
-    Math.min(MIN_SIZE.height, area.height),
-    Math.min(Math.round(wanted.height), area.height - MARGIN)
+    Math.min(MIN_SIZE.height, limit.height),
+    Math.min(Math.round(wanted.height), limit.height)
   );
 
   const x = toFinite(saved && saved.x);

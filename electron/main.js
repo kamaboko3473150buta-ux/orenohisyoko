@@ -35,7 +35,8 @@ function createWindow() {
   // 前回の形を使う。無ければ 1140x880（息抜きの卓が縮まずに収まる大きさ）。
   // どちらにせよ画面の作業領域に収まるかを確かめてから使う。決め打ちで作ると、
   // 画面の小さい環境ではみ出す（1280x720 の画面に高さ880で作ってしまった実例あり）。
-  const bounds = resolveBounds(readJson(PATHS.window, null), screen.getPrimaryDisplay().workArea);
+  const display = screen.getPrimaryDisplay();
+  const bounds = resolveBounds(readJson(PATHS.window, null), display.workArea, display.bounds);
 
   const win = new BrowserWindow({
     ...bounds,
