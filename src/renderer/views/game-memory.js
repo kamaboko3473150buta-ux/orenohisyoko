@@ -135,5 +135,8 @@ Views.gameMemory = {
     }
 
     newGame();
+    // 画面に入りきらなければ卓ごと小さくする（写真は切らない）。
+    // App.go は描き終えてから本体に差し込むので、1フレーム待ってから測る。
+    requestAnimationFrame(() => GameUI.fitScene(scene.el));
   },
 };

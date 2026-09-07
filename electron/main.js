@@ -1,6 +1,6 @@
 // electron/main.js
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, screen } = require('electron');
 const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
@@ -17,11 +17,15 @@ app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
 const PATHS = makePaths(app.getPath('userData'));
 
 function createWindow() {
+  // 880は「息抜きの卓（写真＋札を並べる天板）が縮まずに収まる」高さ。
+  // ただし画面（タスクバーを除いた作業領域）に入らない大きさで作ると、
+  // ウィンドウが画面外にはみ出したり勝手に詰められたりするので、そこで頭打ちにする。
+  // 入らないぶんは画面側で卓ごと小さくして吸収する（views/game-ui.js の fitScene）。
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+
   const win = new BrowserWindow({
-    width: 1140,
-    // 高さ880は「息抜きの卓（写真＋札を並べる天板）が縦スクロールなしで収まる」
-    // ために必要な最小限。ここを縮めると写真の上（秘書子の頭）が切れる。
-    height: 880,
+    width: Math.min(1140, workArea.width - 20),
+    height: Math.min(880, workArea.height - 20),
     title: '俺の秘書子',
     // 開発中（npm start）のウィンドウ左上・タスクバー用。
     // パッケージ後は exe に埋め込んだアイコンが使われる。

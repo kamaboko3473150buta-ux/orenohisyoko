@@ -59,6 +59,48 @@ window.GameUI = (function () {
     };
   }
 
+  // 卓が画面に入りきらないとき、**写真を切らずに卓ごと小さくする**。
+  //
+  // 以前は卓に max-height を掛けて写真の窓を縮めていたが、それだと画面が低い環境で
+  // 秘書子の首から上が切れてしまった（実機で発生）。写真の構図は動かさず、
+  // 卓の幅を詰めて全体を縮めるほうが、絵としても札の見やすさとしても素直。
+  //
+  // 幅を詰めると写真の高さ（幅の .545 倍）もそのぶん減るので、数回で収まる。
+  // --scale は札の大きさに掛かる（styles.css 側で calc に入れてある）。
+  const FIT_MIN_SCALE = 0.55;   // これ以上は小さくしない（札が読めなくなる）
+  const FIT_RESERVE = 62;       // 卓の下に要る高さ（ボタン列＋下余白）
+
+  function fitScene(el) {
+    if (!el) return;
+    const baseWidth = el.getBoundingClientRect().width;
+    if (!baseWidth) return;
+
+    function apply() {
+      if (!el.isConnected) {
+        window.removeEventListener('resize', apply);
+        return;
+      }
+      el.style.width = '';
+      el.style.removeProperty('--scale');
+      const top = el.getBoundingClientRect().top;
+      const avail = window.innerHeight - top - FIT_RESERVE - 2;   // 端数で1pxはみ出すのを防ぐ
+      const full = el.getBoundingClientRect().width;
+      let width = full;
+      for (let i = 0; i < 5; i += 1) {
+        const height = el.getBoundingClientRect().height;
+        if (height <= avail) break;
+        const next = Math.floor(width * (avail / height));
+        width = Math.max(Math.round(full * FIT_MIN_SCALE), next);
+        el.style.width = `${width}px`;
+        el.style.setProperty('--scale', (width / full).toFixed(3));
+        if (width <= full * FIT_MIN_SCALE) break;
+      }
+    }
+
+    apply();
+    window.addEventListener('resize', apply);
+  }
+
   // 卓の上に置く一言（手番や勝敗）。ディーラーの声のつもり。
   function note(text = '') {
     return App.h('div', { class: 'table-note', text });
@@ -153,5 +195,5 @@ window.GameUI = (function () {
     return el;
   }
 
-  return { scene, note, cardEl, emptySlot, pile, clipEl, jitter };
+  return { scene, fitScene, note, cardEl, emptySlot, pile, clipEl, jitter };
 }());
