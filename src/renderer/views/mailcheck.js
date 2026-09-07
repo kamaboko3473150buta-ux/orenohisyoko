@@ -125,6 +125,61 @@ Views.mailcheck = {
     const daysInput = App.h('input', { type: 'text', value: String(conf.days) });
     daysInput.addEventListener('change', () => save({ days: Number(daysInput.value) }));
 
+    // --- Gmailのアカウント ---
+    // 独自ドメイン（Google Workspace）でもよい。Gmailで受け取っていれば読める。
+    // gmail.com に限る作りにはしない。
+    const accountHost = App.h('div', { class: 'field' });
+    const addressInputAcc = App.h('input', { type: 'text', placeholder: 'you@example.co.jp（独自ドメインでも可）' });
+    addressInputAcc.value = conf.gmailAddress || '';
+    addressInputAcc.addEventListener('change', () => save({ gmailAddress: addressInputAcc.value.trim() }));
+
+    const passInput = App.h('input', { type: 'password', placeholder: settings.hasMailPassword ? '設定済み（変えるときだけ入力）' : 'アプリパスワード16桁' });
+    const testBtn = App.h('button', { class: 'secondary', text: '接続テスト' });
+    const testStatus = App.h('div', { class: 'status' });
+
+    passInput.addEventListener('change', async () => {
+      const value = passInput.value.trim();
+      if (!value) return;   // 空のまま離れても、保存済みのものを消さない
+      await window.hishoko.saveSettings({ mailAppPassword: value });
+      passInput.value = '';
+      passInput.placeholder = '設定済み（変えるときだけ入力）';
+      testStatus.textContent = 'アプリパスワードを保存しました。';
+    });
+
+    testBtn.addEventListener('click', async () => {
+      testBtn.disabled = true;
+      testStatus.textContent = '確かめています…';
+      const r = await window.hishoko.mailcheckTest({
+        provider: conf.provider,
+        gmailAddress: addressInputAcc.value.trim(),
+        appPassword: passInput.value.trim() || undefined,
+      });
+      testBtn.disabled = false;
+      testStatus.textContent = r.ok ? 'つながりました。' : (r.message || '確かめられませんでした。');
+    });
+
+    function paintAccount() {
+      accountHost.innerHTML = '';
+      if (conf.provider !== 'gmail') {
+        accountHost.appendChild(App.h('div', {
+          class: 'status',
+          text: 'この PC の Outlook をそのまま読みます。パスワードの入力は要りません。',
+        }));
+        return;
+      }
+      accountHost.appendChild(App.h('label', { text: 'Gmailのアカウント' }));
+      accountHost.appendChild(App.h('div', { class: 'row' }, [
+        App.h('div', { class: 'field' }, [App.h('label', { text: 'メールアドレス' }), addressInputAcc]),
+        App.h('div', { class: 'field' }, [App.h('label', { text: 'アプリパスワード' }), passInput]),
+      ]));
+      accountHost.appendChild(App.h('div', {
+        class: 'status',
+        text: '通常のGoogleのパスワードではなく、2段階認証を有効にしたうえで発行する16桁のアプリパスワードが必要です。',
+      }));
+      accountHost.appendChild(App.h('div', { class: 'actions' }, [testBtn]));
+      accountHost.appendChild(testStatus);
+    }
+
     const providerRow = App.h('div', { class: 'chips' });
     const { providers } = await window.hishoko.mailcheckMeta();
     function paintProvider() {
@@ -133,11 +188,12 @@ Views.mailcheck = {
         providerRow.appendChild(App.h('button', {
           class: `chip${conf.provider === p.id ? ' selected' : ''}`, type: 'button',
           text: p.label, title: p.note,
-          onclick: () => { conf.provider = p.id; save({ provider: p.id }); paintProvider(); },
+          onclick: () => { conf.provider = p.id; save({ provider: p.id }); paintProvider(); paintAccount(); },
         }));
       }
     }
     paintProvider();
+    paintAccount();
 
     // --- 実行 ---
     const runBtn = App.h('button', { text: '確認する' });
@@ -214,6 +270,7 @@ Views.mailcheck = {
       App.h('h2', { text: '② 探し方' }),
       App.h('div', { class: 'field' }, [App.h('label', { text: 'どちらの向きを探すか' }), matchRow]),
       App.h('div', { class: 'field' }, [App.h('label', { text: 'どこを見るか' }), providerRow]),
+      accountHost,
       App.h('div', { class: 'row' }, [
         App.h('div', { class: 'field' }, [
           App.h('label', { text: '何日前まで見るか' }), daysInput,

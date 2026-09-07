@@ -140,16 +140,17 @@ header button.ghost:hover { color: #fff; background: rgba(255, 255, 255, .16); b
 
 main {
   padding: 16px 20px 44px;
-  /* 右下の秘書子（丸枠132px＋吹き出し最大330px）の居場所を最初から空けておく。
-     880px のままだと入力欄がその下にもぐり込む（実機で指摘あり）。
-     560px = サイドバー190px ＋ 秘書子まわり370px。
-     画面が広いときは 880px で頭打ち、狭いときは 360px を下限にする。 */
-  max-width: min(880px, max(360px, calc(100vw - 560px)));
+  /* 右下の秘書子の居場所を最初から空けておく（空けないと入力欄がその下にもぐる）。
+     ただし**主役は入力欄**なので、秘書子に渡す幅は丸枠(132px)＋余白ぶんに絞り、
+     吹き出しは幅ではなく**縦に伸ばして**読ませる。
+     470px = サイドバー190px ＋ 秘書子まわり280px。
+     画面が広いときは 1040px で頭打ち、狭いときは 360px を下限にする。 */
+  max-width: min(1040px, max(360px, calc(100vw - 470px)));
   margin: 0;
 }
 
 /* 秘書子が出ない画面（設定など）では、空けておいた居場所を本文に返す */
-body.no-hishoko main { max-width: 880px; }
+body.no-hishoko main { max-width: 1040px; }
 
 /* --- カード --- */
 
@@ -568,9 +569,9 @@ body.home-view main {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  /* 本文欄の右に空けてある場所（styles.css の main{max-width} と対）をいっぱいに使う。
-     560px = サイドバー190 ＋ 秘書子まわり370。そのうち20pxずつを左右の余白に使う。 */
-  max-width: min(350px, calc(100vw - 40px));
+  /* 入力欄を広く取りたいので、秘書子の幅はここまでに抑える。
+     読みにくい長さになったら、幅ではなく高さで伸ばす（下の max-height）。 */
+  max-width: min(240px, calc(100vw - 40px));
 }
 
 /* hidden 属性で隠すときは、この display:flex を必ず打ち消す。
