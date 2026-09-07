@@ -20,8 +20,19 @@ Views.mailcheck = {
   async render(root) {
     App.setTitle('受信確認');
 
+    // 設定が古い形（受信確認をまだ一度も使っていない）でも画面が壊れないよう、
+    // 足りない項目はここで埋める。実際に mailcheck が渡らず画面全体が出なくなった。
     const settings = await window.hishoko.getSettings();
-    const conf = { ...settings.mailcheck };
+    const conf = {
+      provider: 'gmail',
+      gmailAddress: '',
+      watch: [],
+      match: 'from',
+      unreadOnly: true,
+      days: 14,
+      ...(settings.mailcheck || {}),
+    };
+    if (!Array.isArray(conf.watch)) conf.watch = [];
 
     const errorEl = App.h('div', { class: 'error', hidden: true });
     const statusEl = App.h('div', { class: 'status' });

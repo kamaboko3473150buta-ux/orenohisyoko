@@ -85,6 +85,9 @@ function registerCommonHandlers() {
       defaultMailer: s.defaultMailer,
       defaultTaskInput: s.defaultTaskInput,
       models: s.models,
+      // 受信確認の設定。アプリパスワードそのものは、APIキーと同じく画面に渡さない。
+      mailcheck: s.mailcheck,
+      hasMailPassword: Boolean(s.mailAppPassword),
     };
   });
 

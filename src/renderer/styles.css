@@ -568,7 +568,9 @@ body.home-view main {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  max-width: min(330px, calc(100vw - 40px));
+  /* 本文欄の右に空けてある場所（styles.css の main{max-width} と対）をいっぱいに使う。
+     560px = サイドバー190 ＋ 秘書子まわり370。そのうち20pxずつを左右の余白に使う。 */
+  max-width: min(350px, calc(100vw - 40px));
 }
 
 /* hidden 属性で隠すときは、この display:flex を必ず打ち消す。
@@ -586,7 +588,9 @@ body.home-view main {
   box-shadow: 0 6px 20px rgba(22, 48, 43, .16);
   /* 「今日の進め方」の答えのような長い文章も、たいていは
      スクロールせずに読み切れる高さを確保する */
-  max-height: 62vh;
+  /* ヘッダーの下から丸枠の上までを目いっぱい使い、それでも入らなければ縦スクロール。
+     212px = ヘッダー48 ＋ 丸枠132 ＋ すき間8 ＋ 下の余白20 ＋ 見切れ防止4 */
+  max-height: calc(100vh - 212px);
   overflow-y: auto;
 }
 .hishoko-bubble p {
@@ -980,31 +984,6 @@ body.game-view main {
      max-width のままだと卓が左に寄り、右側だけ余白が残る。 */
   max-width: none;
 }
-
-/* 息抜きの入口。ボードゲームカフェの絵を敷いて、仕事の画面と気分を変える */
-.breaktime-hero {
-  position: relative;
-  /* 画面が低いときに一覧が押し出されないよう、高さも画面に合わせる */
-  height: clamp(110px, 22vh, 190px);
-  margin-bottom: 14px;
-  border-radius: 12px;
-  overflow: hidden;
-  background-image: url('../../assets/games/boardgame-cafe.jpg');
-  background-size: cover;
-  background-position: center 38%;
-  box-shadow: 0 10px 24px rgba(22, 48, 43, .24);
-  display: flex;
-  align-items: flex-end;
-}
-.breaktime-hero p {
-  margin: 0;
-  width: 100%;
-  padding: 26px 18px 12px;
-  font-size: 13.5px;
-  color: #fff;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .62));
-}
-
 
 }
 

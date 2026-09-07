@@ -21,7 +21,7 @@ Views.gameMemory = {
     scene.table.appendChild(App.h('div', { class: 'memory-area' }, [grid, side]));
     scene.table.appendChild(note);
 
-    root.appendChild(App.h('p', { class: 'game-intro', text: '8組16枚。交互に2枚めくり、同じ数字なら取ってもう一度。多く取ったほうの勝ちです。' }));
+    root.appendChild(App.h('p', { class: 'game-intro', text: '12組24枚。交互に2枚めくり、同じ数字なら取ってもう一度。多く取ったほうの勝ちです。' }));
     root.appendChild(scene.el);
     root.appendChild(actionRow);
 
@@ -128,7 +128,7 @@ Views.gameMemory = {
     function newGame() {
       busy = false;
       scene.mood('idle');
-      state = MemoryGame.start({ rng: Math.random, pairs: 8, memoryRate: Play.level().memoryRate });
+      state = MemoryGame.start({ rng: Math.random, pairs: 12, memoryRate: Play.level().memoryRate });
       buildBoard();
       paint();
       scene.say('お先にどうぞ。私はときどき忘れます。');

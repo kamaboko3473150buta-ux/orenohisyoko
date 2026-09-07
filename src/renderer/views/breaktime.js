@@ -53,11 +53,9 @@ Views.breaktime = {
   render(root) {
     App.setTitle('息抜き');
 
-    // 入口の絵。ここから先は仕事ではない、と一目で分かるようにする。
-    root.appendChild(App.h('div', { class: 'breaktime-hero' }, [
-      App.h('p', { text: 'ひと息つきましょう。秘書子と1対1で遊べます。' }),
-    ]));
-
+    // 入口にボードゲームカフェの絵を敷いていたが、横長に切ると秘書子の顔が
+    // 見切れて見栄えが悪かったので外した。絵を使うなら、この比率で顔が入る
+    // 構図のものが要る。
     const levelRow = App.h('div', { class: 'chips' });
     const paintLevels = () => {
       levelRow.innerHTML = '';
