@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('hishoko', {
   // 選べるモデルの一覧・機能ごとの既定（Task 33）
   modelsList: () => ipcRenderer.invoke('models:list'),
 
+  docPickImages: () => ipcRenderer.invoke('doc:pickImages'),
+
   // 資料作成の下書き
   docDraftList: () => ipcRenderer.invoke('doc:draftList'),
   docDraftSave: (draft) => ipcRenderer.invoke('doc:draftSave', draft),

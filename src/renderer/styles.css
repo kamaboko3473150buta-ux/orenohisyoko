@@ -1078,3 +1078,22 @@ body.game-view main {
 }
 .doc-fields[hidden] { display: none; }
 .doc-fields textarea { min-height: 66px; }
+
+/* 見出しごとの画像 */
+.doc-images { margin-bottom: 6px; }
+.doc-image-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.doc-image-name {
+  flex: 0 0 150px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-image-row input { flex: 1 1 auto; }
+.doc-image-row button { flex: 0 0 auto; }

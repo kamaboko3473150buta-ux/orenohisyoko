@@ -304,6 +304,20 @@ function buildBodyUserPrompt({
   ].join('\n');
 }
 
+// 見出しに添える画像（スクリーンショット等）。AIが作るものではなく、
+// 利用者が本文の編集画面で選んだものが入る。ここでは形を整えるだけ。
+function sanitizeSectionImages(v) {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((im) => {
+      if (!im || typeof im !== 'object') return null;
+      const p = sanitizeString(im.path);
+      if (!p) return null;
+      return { path: p, name: sanitizeString(im.name), caption: sanitizeString(im.caption) };
+    })
+    .filter((im) => im !== null);
+}
+
 function sanitizeBodySection(s) {
   if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
   return {
@@ -312,6 +326,7 @@ function sanitizeBodySection(s) {
     bullets: sanitizeStringArray(s.bullets),
     table: sanitizeTable(s.table),
     chart: sanitizeChart(s.chart),
+    images: sanitizeSectionImages(s.images),
   };
 }
 

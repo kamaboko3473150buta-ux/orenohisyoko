@@ -134,6 +134,21 @@ function register({
 
   // 新しい資料作成を始めるときに呼ぶ。前回抽出した画像と一時フォルダを消してからゼロに戻す
   // （資料作成画面を開くたびに画面側が呼ぶ。他人の資料の画像をいつまでも残さないため）。
+  // 見出しに添える画像（スクリーンショット等）を選ぶ。
+  // 参考資料と違い、これは中身を読まず、書き出すときにそのまま差し込む。
+  ipcMain.handle('doc:pickImages', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: '画像を選ぶ',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '画像', extensions: ['png', 'jpg', 'jpeg'] }],
+    });
+    if (canceled) return { images: [] };
+    return {
+      images: (filePaths || []).map((p) => ({ path: p, name: path.basename(p), caption: '' })),
+    };
+  });
+
   // --- 下書き（作りかけを残して、あとから続ける） ---
   // 参考資料は中身ではなく場所だけを持ち、開くときに読み直す。
 

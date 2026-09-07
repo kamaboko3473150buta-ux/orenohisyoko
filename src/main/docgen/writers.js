@@ -7,7 +7,7 @@
 // そのため各関数は例外を投げず、空のものは出力しないという方針で書く。
 
 const fs = require('node:fs/promises');
-const { accessSync, constants: fsConstants } = require('node:fs');
+const { accessSync, readFileSync, constants: fsConstants } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -15,6 +15,10 @@ const {
   Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, TextRun, WidthType, ImageRun,
 } = require('docx');
 const PptxGenJS = require('pptxgenjs');
+const { imageSize, pngSize, fitWidth } = require('./image-size');
+
+// 本文に差し込む画像の最大の幅（px）。A4の本文幅におさまる目安。
+const DOC_IMAGE_MAX_WIDTH = 520;
 
 // 日本語（游ゴシック）が文字化けしないよう明示するフォント。
 // buildHtml と同じ考え方（Windows標準搭載のフォントを優先し、無ければMeiryo系にフォールバック）。
@@ -149,9 +153,13 @@ function normalizeDoc(doc) {
     const bullets = sanitizeStringArray(s.bullets);
     const table = normalizeTable(s.table);
     const chart = normalizeChart(s.chart);
-    if (!heading && !paragraphs.length && !bullets.length && !table && !chart) continue;
+    // 見出しに添える画像（利用者が選んだスクリーンショット等）。
+    const images = (Array.isArray(s.images) ? s.images : [])
+      .filter((im) => im && typeof im.path === 'string' && im.path)
+      .map((im) => ({ path: im.path, caption: sanitizeString(im.caption) }));
+    if (!heading && !paragraphs.length && !bullets.length && !table && !chart && !images.length) continue;
     sections.push({
-      heading, paragraphs, bullets, table, chart,
+      heading, paragraphs, bullets, table, chart, images,
     });
   }
   return { title, meta, sections };
@@ -364,6 +372,28 @@ function buildChartSvg(chart, opts = {}) {
 // PDF化のためのHTMLを組み立てる純粋関数。
 // 生成された本文がそのまま入るため、HTML特殊文字は必ずエスケープする。
 // 日本語が豆腐（□）にならないよう、日本語フォントを明示する。
+// 見出しに添えた画像を、HTML（PDF用）に埋め込む形にする。
+// file:// で参照すると PDF 化のときに読めないことがあるので、data URI にして埋め込む。
+// 読めない画像は差し込まない（そこだけ壊れたPDFになるより、無いほうがまし）。
+function buildImagesHtml(images) {
+  const list = Array.isArray(images) ? images : [];
+  const out = [];
+  for (const im of list) {
+    let buf;
+    try {
+      buf = readFileSync(im.path);
+    } catch (err) {
+      continue;
+    }
+    const size = fitWidth(imageSize(buf), DOC_IMAGE_MAX_WIDTH);
+    if (!size) continue;
+    const mime = pngSize(buf) ? 'image/png' : 'image/jpeg';
+    const caption = im.caption ? `<div class="caption">${escapeHtml(im.caption)}</div>` : '';
+    out.push(`<figure><img src="data:${mime};base64,${buf.toString('base64')}" width="${size.width}" height="${size.height}">${caption}</figure>`);
+  }
+  return out;
+}
+
 function buildHtml(doc) {
   const { title, meta, sections } = normalizeDoc(doc);
 
@@ -387,6 +417,8 @@ function buildHtml(doc) {
     if (section.chart) {
       body.push(`<div class="chart">${buildChartSvg(section.chart)}</div>`);
     }
+    // 画像は説明文の下に置く（手順の内容を読んでから図を見る並び）
+    for (const html of buildImagesHtml(section.images)) body.push(html);
   }
 
   const pageTitle = escapeHtml(title || '資料');
@@ -416,6 +448,9 @@ function buildHtml(doc) {
   table.meta th { background: #f2f2f2; white-space: nowrap; }
   table.data th { background: #f2f2f2; }
   .chart { margin: 8px 0 16px; }
+  figure { margin: 8px 0 14px; }
+  figure img { max-width: 100%; border: 1px solid #ccc; }
+  .caption { font-size: 9pt; color: #666; margin-top: 3px; }
   .chart svg { max-width: 100%; height: auto; }
 </style>
 </head>
@@ -553,6 +588,24 @@ async function buildDocxChildren(doc, browserWindowClass) {
     if (sectionTable) {
       children.push(sectionTable);
       children.push(new Paragraph({ text: '' }));
+    }
+    // 見出しに添えた画像（利用者が選んだスクリーンショット等）を、説明文の下に置く。
+    for (const im of section.images) {
+      let buf;
+      try {
+        // eslint-disable-next-line no-await-in-loop -- 画像は1枚ずつ読めば十分
+        buf = await fs.readFile(im.path);
+      } catch (err) {
+        continue;   // 読めない画像は差し込まない（そこだけ壊れた文書にしない）
+      }
+      const size = fitWidth(imageSize(buf), DOC_IMAGE_MAX_WIDTH);
+      if (!size) continue;   // 大きさが分からない形式は差し込まない
+      children.push(new Paragraph({
+        children: [new ImageRun({ data: buf, transformation: size })],
+      }));
+      if (im.caption) {
+        children.push(new Paragraph({ children: [new TextRun({ text: im.caption, size: 18, color: '666666' })] }));
+      }
     }
     if (section.chart) {
       // eslint-disable-next-line no-await-in-loop -- 画像化は1枚ずつ順番に行えば十分

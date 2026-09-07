@@ -212,7 +212,7 @@ test('parseBodyJson: sectionsが配列でない・bulletsが文字列・paragrap
 
   const raw2 = JSON.stringify({ title: 'X', sections: [{ heading: '見出し', paragraphs: ['正常'], bullets: '文字列です' }] });
   assert.deepStrictEqual(parseBodyJson(raw2).doc.sections, [{
-    heading: '見出し', paragraphs: ['正常'], bullets: [], table: null, chart: null,
+    heading: '見出し', paragraphs: ['正常'], bullets: [], table: null, chart: null, images: [],
   }]);
 
   const raw3 = JSON.stringify({ title: 'X', sections: [{ heading: '見出し', paragraphs: ['正常', 123, null, '正常2'], bullets: [] }] });

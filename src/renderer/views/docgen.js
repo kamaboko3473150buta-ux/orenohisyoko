@@ -575,11 +575,48 @@ Views.docgen = {
             renderSections();
           });
 
+          // 見出しごとの画像（スクリーンショット等）。説明文の下に差し込まれる。
+          // 手順を読んでから図を見る並びになるので、引継ぎ資料で効く。
+          if (!Array.isArray(s.images)) s.images = [];
+          const imagesHost = App.h('div', { class: 'doc-images' });
+
+          function renderImages() {
+            imagesHost.innerHTML = '';
+            s.images.forEach((im, i) => {
+              const capInput = App.h('input', { type: 'text', placeholder: '説明（任意）' });
+              capInput.value = im.caption || '';
+              capInput.addEventListener('input', () => { im.caption = capInput.value; });
+              imagesHost.appendChild(App.h('div', { class: 'doc-image-row' }, [
+                App.h('span', { class: 'doc-image-name', text: im.name || im.path }),
+                capInput,
+                App.h('button', {
+                  class: 'ghost',
+                  text: '✕',
+                  onclick: () => { s.images.splice(i, 1); renderImages(); },
+                }),
+              ]));
+            });
+          }
+          renderImages();
+
+          const addImageBtn = App.h('button', { class: 'secondary', text: '画像を追加' });
+          addImageBtn.addEventListener('click', async () => {
+            const { images } = await window.hishoko.docPickImages();
+            if (!images || !images.length) return;
+            s.images = s.images.concat(images);
+            renderImages();
+          });
+
           sectionsHost.appendChild(App.h('div', { class: 'doc-section' }, [
             App.h('div', { class: 'doc-section-row' }, [headingInput, removeBtn]),
             App.h('div', { class: 'row' }, [
               App.h('div', { class: 'field' }, [App.h('label', { text: '本文' }), paraTextarea]),
               App.h('div', { class: 'field' }, [App.h('label', { text: '箇条書き' }), bulletsTextarea]),
+            ]),
+            App.h('div', { class: 'field' }, [
+              App.h('label', { text: '画像（この見出しの説明の下に入ります）' }),
+              imagesHost,
+              App.h('div', { class: 'actions' }, [addImageBtn]),
             ]),
           ]));
         });
