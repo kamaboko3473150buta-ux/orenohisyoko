@@ -9,6 +9,7 @@ const path = require('node:path');
 const { ipcMain, dialog, BrowserWindow } = require('electron');
 const { DOC_TYPES } = require('./types');
 const { readFiles } = require('./readers');
+const scannedPdf = require('./scanned-pdf');
 const { extractImages, MAX_IMAGES } = require('./images');
 const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
@@ -72,6 +73,11 @@ function buildSourcesCachePrefix(sources) {
 // セッション管理の仕組みを別途作るのはYAGNI）。
 let imageSession = { images: [], dirs: [] };
 
+// 文字が入っていないPDF（スキャンPDF）。AIに画像として読ませるため、場所を覚えておく。
+// 画面にはファイルの場所を渡さないので、ここ（メインプロセス）で持つ。
+// 画像抽出のセッションと同じく、新しい資料作成を始めるときに捨てる。
+let scannedSession = [];
+
 // 抽出済みの画像と、それを保存した一時フォルダをすべて消す。
 // 一時フォルダが1つも無い（何も抽出していない）場合も含め、例外は投げない。
 async function cleanupImageSession() {
@@ -107,20 +113,39 @@ function register({ getSettings, getUsage, saveUsage }) {
   // 選んだファイルをまとめて読み取る。1件読めなくても他は続ける（readers.js側の方針）。
   // 添付の文字数からの概算費用。preload はサンドボックスでファイルを require できないため、
   // 計算はここ（メインプロセス）で行って画面に返す。
-  ipcMain.handle('doc:estimate', (_e, { chars, modelId } = {}) => ({
-    yen: estimateYen(chars, modelId),
-    needsConfirm: needsConfirm(chars),
-  }));
+  // 添付の文字数からの概算費用。スキャンPDFはページ数ぶんのトークンを足す
+  // （文字が無いぶん、ページを画像として読ませる費用がかかるため）。
+  ipcMain.handle('doc:estimate', (_e, { chars, modelId } = {}) => {
+    const pdfPages = scannedSession.reduce((sum, e) => sum + (Number(e.pdfPages) || 0), 0);
+    const total = (Number(chars) || 0) + scannedPdf.tokensForPages(pdfPages);
+    return {
+      yen: estimateYen(total, modelId),
+      needsConfirm: needsConfirm(total),
+      scannedPages: pdfPages,
+    };
+  });
 
   // 新しい資料作成を始めるときに呼ぶ。前回抽出した画像と一時フォルダを消してからゼロに戻す
   // （資料作成画面を開くたびに画面側が呼ぶ。他人の資料の画像をいつまでも残さないため）。
   ipcMain.handle('doc:resetImages', async () => {
     await cleanupImageSession();
+    scannedSession = [];
     return { ok: true };
   });
 
   ipcMain.handle('doc:readFiles', async (_e, { filePaths, typeId } = {}) => {
     const results = await readFiles(filePaths);
+
+    // 文字が入っていないPDFは、AIに画像として読ませる側へ回す
+    // （テキストとして送っても中身がまったく伝わらないため）。
+    // 画面にはファイルの場所を渡さないので、ここで覚えておく。
+    for (const r of results) {
+      if (r && r.scanned && r.path) {
+        scannedSession.push({
+          name: r.name, path: r.path, pdfPages: r.pdfPages, scanned: true,
+        });
+      }
+    }
 
     // 添付からプレゼン用の画像を抽出する（Task 35/38）。
     // 使うのはプレゼン資料のときだけなので、それ以外では抽出しない
@@ -153,6 +178,7 @@ function register({ getSettings, getUsage, saveUsage }) {
   } = {}) => {
     const isSlide = typeId === 'presentation';
     const settings = getSettings();
+    const scanned = await scannedPdf.collect(scannedSession);
     const result = await generateText({
       apiKey: settings.apiKey,
       system: isSlide ? buildSlideOutlineSystemPrompt() : buildOutlineSystemPrompt(typeId),
@@ -160,6 +186,8 @@ function register({ getSettings, getUsage, saveUsage }) {
         ? buildSlideOutlineUserPrompt({ brief, sources, imageCount: imageSession.images.length, today: todayYmd() })
         : buildOutlineUserPrompt({ typeId, brief, sources, today: todayYmd() }),
       maxTokens: OUTLINE_MAX_TOKENS,
+      // 文字が入っていないPDFは、そのものを添えてAIに読ませる
+      documents: scanned.documents,
       // 画面で選んだモデル（その回だけの上書き）。未指定なら設定の既定（資料作成）を使う。
       model: model || settings.models.docgen,
       // Task 40: 本文づくり（doc:body）でも同じ参考資料を送るため、キャッシュから読ませる。
@@ -170,10 +198,14 @@ function register({ getSettings, getUsage, saveUsage }) {
     saveUsage(addUsage(getUsage(), result.usage, new Date().toISOString()));
     if (isSlide) {
       const { deck, failed } = parseDeckJson(result.body);
-      return { ok: true, outline: deck, failed };
+      return {
+        ok: true, outline: deck, failed, scannedPdfs: scanned.documents.length, scannedSkipped: scanned.skipped,
+      };
     }
     const { outline, failed } = parseOutlineJson(result.body);
-    return { ok: true, outline, failed };
+    return {
+      ok: true, outline, failed, scannedPdfs: scanned.documents.length, scannedSkipped: scanned.skipped,
+    };
   });
 
   // 確定した構成案から本文を作る（2回目のAPI呼び出し）
@@ -182,6 +214,7 @@ function register({ getSettings, getUsage, saveUsage }) {
   } = {}) => {
     const isSlide = typeId === 'presentation';
     const settings = getSettings();
+    const scanned = await scannedPdf.collect(scannedSession);
     const result = await generateText({
       apiKey: settings.apiKey,
       system: isSlide ? buildSlideBodySystemPrompt() : buildBodySystemPrompt(typeId),
@@ -193,6 +226,7 @@ function register({ getSettings, getUsage, saveUsage }) {
           typeId, brief, sources, outline, today: todayYmd(),
         }),
       maxTokens: BODY_MAX_TOKENS,
+      documents: scanned.documents,
       model: model || settings.models.docgen,
       // Task 40: 構成案づくり（doc:outline）で書き込んだキャッシュを読ませる。
       cachePrefix: buildSourcesCachePrefix(sources),

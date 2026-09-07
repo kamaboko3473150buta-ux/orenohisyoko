@@ -134,11 +134,15 @@ Views.docgen = {
           // 省略した場合だけ「元N字 → 渡すM字」を出す（省略していないファイルにまで
           // 出すと「渡す文字数」の意味が薄れるため）。costの計算は引き続きa.chars
           // （実際に渡す文字数）を使う。
-          const infoText = a.ok && a.truncated
-            ? `元${a.originalChars.toLocaleString()}字 → 渡す${a.chars.toLocaleString()}字`
-            : a.ok
-              ? `${a.chars.toLocaleString()}字`
-              : '';
+          // 文字が入っていないPDF（スキャン）は、文字数ではなく「画像として読ませる」と伝える。
+          // 「0字」とだけ出ていると、添付が効いていないのか判断できない。
+          const infoText = a.ok && a.scanned
+            ? `画像だけのPDF → AIに読ませます（${a.pdfPages || '?'}ページ）`
+            : a.ok && a.truncated
+              ? `元${a.originalChars.toLocaleString()}字 → 渡す${a.chars.toLocaleString()}字`
+              : a.ok
+                ? `${a.chars.toLocaleString()}字`
+                : '';
           const infoEl = a.ok
             ? App.h('span', { class: 'attach-chars', text: infoText })
             : App.h('span', { class: 'attach-error', text: `読み取れませんでした: ${a.error}` });
@@ -158,12 +162,17 @@ Views.docgen = {
 
       async function renderSummary() {
         const chars = totalChars();
-        if (!chars) {
+        const scannedPages = state.attachments
+          .filter((a) => a.ok && a.scanned)
+          .reduce((sum, a) => sum + (Number(a.pdfPages) || 0), 0);
+        if (!chars && !scannedPages) {
           summaryEl.textContent = '参考資料を添付すると、文字数と概算費用を表示します。';
           return;
         }
         const { yen } = await window.hishoko.docEstimate(chars, modelSelect.value);
-        summaryEl.textContent = `合計 ${chars.toLocaleString()}字 / 概算 約${Math.round(yen)}円（構成案・本文の2回分）`;
+        // 画像として読ませるPDFはページ単位で費用がかかるので、内訳を隠さず出す。
+        const scannedNote = scannedPages ? ` ＋ 画像として読むPDF ${scannedPages}ページ` : '';
+        summaryEl.textContent = `合計 ${chars.toLocaleString()}字${scannedNote} / 概算 約${Math.round(yen)}円（構成案・本文の2回分）`;
       }
 
       pickBtn.addEventListener('click', async () => {
@@ -233,6 +242,12 @@ Views.docgen = {
 
         outlineBtn.disabled = false;
         outlineBtn.textContent = '構成案を作る';
+
+        // 画像として読ませられなかったPDFがあれば必ず伝える。
+        // 黙って落とすと「添付したのに反映されていない」原因が分からなくなる。
+        if (res.ok && res.scannedSkipped && res.scannedSkipped.length) {
+          App.toast(`${res.scannedSkipped[0].name}: ${res.scannedSkipped[0].message}`);
+        }
 
         if (!res.ok) {
           errorEl.textContent = res.message;

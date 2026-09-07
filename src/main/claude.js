@@ -81,6 +81,24 @@ function buildUserContent(user, cachePrefix) {
   ];
 }
 
+// PDFそのものを添えるときの content。文字が入っていないスキャンPDFは、
+// テキストとして送っても中身がまったく伝わらないので、AIに画像として読ませる。
+// 文書ブロックは本文より前に置く（何を見て書くのかを先に渡すため）。
+function withDocuments(content, documents) {
+  const docs = (Array.isArray(documents) ? documents : [])
+    .filter((d) => d && d.base64)
+    .map((d) => ({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: d.base64 },
+      title: String(d.name || 'PDF'),
+    }));
+  if (docs.length === 0) return content;
+  const rest = Array.isArray(content)
+    ? content
+    : [{ type: 'text', text: String(content == null ? '' : content) }];
+  return docs.concat(rest);
+}
+
 // レスポンスのusageから、利用状況の記録（Task 19・32・40）に使う形を取り出す。
 // SDKのレスポンス形式が変わった・usageが無い場合でも例外を投げず0にする。
 function usageFromResponse(res, model) {
@@ -99,7 +117,7 @@ function usageFromResponse(res, model) {
 // model は省略可（省略時はこれまでどおり MODEL＝claude-opus-5）。既存の呼び出しを壊さないため。
 // cachePrefix も省略可（Task 40）。省略時はこれまでどおり content を文字列のまま送る。
 async function generateText({
-  apiKey, system, user, maxTokens, model, cachePrefix,
+  apiKey, system, user, maxTokens, model, cachePrefix, documents,
 }) {
   if (!apiKey) {
     return { ok: false, code: 'no_key', message: 'Claude APIキーが設定されていません。設定画面で登録してください。' };
@@ -112,7 +130,7 @@ async function generateText({
       max_tokens: maxTokens || MAX_TOKENS,
       output_config: { effort: 'low' },
       system,
-      messages: [{ role: 'user', content: buildUserContent(user, cachePrefix) }],
+      messages: [{ role: 'user', content: withDocuments(buildUserContent(user, cachePrefix), documents) }],
     });
     if (res.stop_reason === 'refusal') {
       return { ok: false, code: 'refusal', message: 'この内容では文面を作成できませんでした。書き方を変えてお試しください。' };
@@ -142,5 +160,6 @@ async function generateBody({
 }
 
 module.exports = {
+  withDocuments,
   MODEL, extractText, classifyError, generateText, generateBody, buildUserContent, usageFromResponse,
 };

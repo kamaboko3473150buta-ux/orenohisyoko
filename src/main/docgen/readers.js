@@ -299,8 +299,25 @@ async function readCsvText(filePath) {
   return summarizeSheet(sheetName, [header, ...dataRows]);
 }
 
+// スキャンしたPDF（紙をそのまま画像にしたもの）は、文字が画像なので抽出しても
+// ほとんど何も取れない。これまではそれを黙って「読めた（0字）」として扱っていたため、
+// 添付したのに中身がまったく反映されない状態になっていた。
+// ここで見分けて、AIに画像として読ませる側へ回す。
+//
+// 1ページあたり何字あれば「文字が入っている」とみなすか。表紙だけ文字が無い、
+// といったPDFを誤って全部スキャン扱いしないよう、低めのしきい値にしてある。
+const MIN_CHARS_PER_PAGE = 24;
+
+function looksScanned(text, pages) {
+  const n = Math.max(1, Math.floor(Number(pages)) || 1);
+  // 空白や改行だけの抽出結果は「無い」とみなす
+  const chars = String(text == null ? '' : text).replace(/\s/g, '').length;
+  return chars < MIN_CHARS_PER_PAGE * n;
+}
+
 // pdf: ページごとにテキストを連結する。verbosity:0 は「標準フォントが無い」等の
 // 描画向け警告を黙らせるため（テキスト抽出だけなら実害が無い）。
+// ページ数も返す（スキャンPDFかどうかの判断と、費用の概算に使う）。
 async function readPdfText(filePath) {
   const pdfjsLib = await loadPdfjs();
   const data = new Uint8Array(await fs.readFile(filePath));
@@ -320,7 +337,7 @@ async function readPdfText(filePath) {
       const content = await page.getTextContent();
       pages.push(content.items.map((it) => (it && it.str) || '').join(' '));
     }
-    return pages.join('\n\n');
+    return { text: pages.join('\n\n'), pages: doc.numPages };
   } finally {
     await loadingTask.destroy().catch(() => {});
   }
@@ -337,6 +354,8 @@ async function readFileText(filePath) {
   }
   try {
     let text;
+    let pdfPages = 0;
+    let scanned = false;
     if (ext === '.txt' || ext === '.md') {
       text = await readPlainText(filePath);
     } else if (ext === '.csv') {
@@ -348,7 +367,10 @@ async function readFileText(filePath) {
     } else if (ext === '.xlsx') {
       text = await readXlsxText(filePath);
     } else if (ext === '.pdf') {
-      text = await readPdfText(filePath);
+      const pdf = await readPdfText(filePath);
+      text = pdf.text;
+      pdfPages = pdf.pages;
+      scanned = looksScanned(pdf.text, pdf.pages);
     } else {
       text = ''; // ここには来ない想定（isSupportedと同じ一覧のため）
     }
@@ -359,11 +381,31 @@ async function readFileText(filePath) {
     // で「元は何字あったか・省略したか」を別途伝える。
     const { text: finalText, originalChars, truncated } = truncateText(safeText, MAX_CHARS_PER_FILE);
     return {
-      ok: true, name, text: finalText, chars: finalText.length, originalChars, truncated, error: null,
+      ok: true,
+      name,
+      text: finalText,
+      chars: finalText.length,
+      originalChars,
+      truncated,
+      error: null,
+      // スキャンPDFのときだけ、AIに画像として読ませるための情報を添える。
+      // path はメインプロセス内でしか使わない（画面には渡さない）。
+      scanned,
+      pdfPages,
+      path: scanned ? String(filePath) : '',
     };
   } catch (err) {
     return {
-      ok: false, name, text: '', chars: 0, originalChars: 0, truncated: false, error: (err && err.message) || String(err),
+      ok: false,
+      name,
+      text: '',
+      chars: 0,
+      originalChars: 0,
+      truncated: false,
+      error: (err && err.message) || String(err),
+      scanned: false,
+      pdfPages: 0,
+      path: '',
     };
   }
 }
@@ -382,6 +424,8 @@ module.exports = {
   readFiles,
   summarizeSheet,
   truncateText,
+  looksScanned,
+  MIN_CHARS_PER_PAGE,
   parseCsv,
   SHEET_SAMPLE_ROWS,
   MAX_CHARS_PER_FILE,
