@@ -11,27 +11,36 @@ window.GameUI = (function () {
     return x - Math.floor(x);
   }
 
-  // 秘書子が向かいに座っている卓。上半分は写真（オフィスと秘書子）、
-  // その下に天板を継ぎ足して、そこがゲームの場所になる。
-  // 写真の天板は下1/3しかなく、札を並べる幅が足りないため、
-  // 木目のつづきをCSSで描いて伸ばしている（継ぎ目の色は写真から採った）。
+  // 秘書子が向かいに座っている卓。上半分は写真、その下に天板を継ぎ足す。
+  // 写真の天板だけでは24枚を並べる高さが足りないため。
   //
-  // 返り値の table に札や駒を入れる。say() で秘書子が一言しゃべる。
-  function scene(opts = {}) {
+  // 写真は3枚あり、勝敗で丸ごと差し替える（同じ部屋・同じ構図で描いてもらった）。
+  //   idle … ふだん   sulk … 秘書子が負けて悔しい   joy … 秘書子が勝って嬉しい
+  // 3枚は「天板が木目だけになる行」の位置が違うので、拡大率と上の切り落とし量を
+  // 1枚ずつ実測して styles.css に持たせている（.scene-photo.idle など）。
+  // 写真を差し替えたら測り直すこと。
+  const MOODS = ['idle', 'sulk', 'joy'];
+
+  function scene() {
     const bubbleText = App.h('p', {});
     const bubble = App.h('div', { class: 'scene-bubble' }, [bubbleText]);
     bubble.hidden = true;
 
-    // 負けたときの顔。卓の写真は1枚きりで表情が変わらないので、
-    // 別に描いてもらった「ムッとした顔」を手前に寄せて出す（カットイン）。
+    // 3枚とも最初に読み込んでおき、表示だけを切り替える。
+    // 勝敗が決まってから読みに行くと、一瞬なにも出ない時間ができてしまう。
     // index.html（src/renderer/）から見て assets/ はリポジトリ直下にある。
-    const cutin = App.h('img', { class: 'scene-cutin', src: '../../assets/games/hishoko-sulk.jpg', alt: '' });
-    cutin.hidden = true;
-    cutin.addEventListener('error', () => { cutin.hidden = true; });
+    const photos = {};
+    const figure = App.h('div', { class: 'scene-figure' });
+    for (const mood of MOODS) {
+      const img = App.h('img', { class: `scene-photo ${mood}`, src: `../../assets/games/scene-${mood}.jpg`, alt: '' });
+      img.hidden = mood !== 'idle';
+      photos[mood] = img;
+      figure.appendChild(img);
+    }
+    figure.appendChild(bubble);
 
-    const figure = App.h('div', { class: 'scene-figure' }, [cutin, bubble]);
     const table = App.h('div', { class: 'scene-table' });
-    const el = App.h('div', { class: 'scene' }, [figure, table]);
+    const el = App.h('div', { class: 'scene mood-idle' }, [figure, table]);
 
     return {
       el,
@@ -40,9 +49,12 @@ window.GameUI = (function () {
         bubbleText.textContent = text || '';
         bubble.hidden = !text;
       },
-      // face('sulk') で負けたときの顔、face(null) でふだんの写真に戻す。
-      face(kind) {
-        cutin.hidden = kind !== 'sulk';
+      // mood('sulk') で悔しい顔、mood('joy') で嬉しい顔、mood() でふだんに戻す。
+      // 天板の色も写真ごとに変わるので、el のクラスで切り替える。
+      mood(kind) {
+        const next = MOODS.includes(kind) ? kind : 'idle';
+        for (const m of MOODS) photos[m].hidden = m !== next;
+        for (const m of MOODS) el.classList.toggle(`mood-${m}`, m === next);
       },
     };
   }

@@ -18,8 +18,7 @@ Views.gameMemory = {
     const note = GameUI.note();
     const actionRow = App.h('div', { class: 'game-actions' });
 
-    scene.table.appendChild(App.h('div', { class: 'memory-area' }, [grid]));
-    scene.table.appendChild(side);
+    scene.table.appendChild(App.h('div', { class: 'memory-area' }, [grid, side]));
     scene.table.appendChild(note);
 
     root.appendChild(App.h('p', { class: 'game-intro', text: '12組24枚。交互に2枚めくり、同じ数字なら取ってもう一度。多く取ったほうの勝ちです。' }));
@@ -66,7 +65,7 @@ Views.gameMemory = {
         actionRow.appendChild(App.h('button', {
           class: 'secondary', text: '息抜きに戻る', onclick: () => App.go('breaktime'),
         }));
-        scene.face(state.winner === 'you' ? 'sulk' : null);
+        scene.mood(state.winner === 'you' ? 'sulk' : (state.winner === 'hishoko' ? 'joy' : 'idle'));
         scene.say(state.winner === 'you' ? '負けました。よく覚えていらっしゃいますね。'
             : (state.winner === 'hishoko' ? 'いただきました。今日は冴えています。' : '互角でしたね。'));
         return;
@@ -128,7 +127,7 @@ Views.gameMemory = {
 
     function newGame() {
       busy = false;
-      scene.face(null);
+      scene.mood('idle');
       state = MemoryGame.start({ rng: Math.random, pairs: 12, memoryRate: Play.level().memoryRate });
       buildBoard();
       paint();

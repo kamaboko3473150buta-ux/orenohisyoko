@@ -87,7 +87,7 @@ Views.gameBabanuki = {
         actionRow.appendChild(App.h('button', {
           class: 'secondary', text: '息抜きに戻る', onclick: () => App.go('breaktime'),
         }));
-        scene.face(won ? 'sulk' : null);
+        scene.mood(won ? 'sulk' : 'joy');
         scene.say(won ? 'やられました……もう一回、お願いします。' : 'いただきました。読み勝ちですね。');
         return;
       }
@@ -136,7 +136,7 @@ Views.gameBabanuki = {
 
     function newGame() {
       busy = false;
-      scene.face(null);
+      scene.mood('idle');
       state = Babanuki.start({ rng: Math.random, tellAccuracy: Play.level().tellAccuracy });
       paint();
     }

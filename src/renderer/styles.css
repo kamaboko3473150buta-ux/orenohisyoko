@@ -646,39 +646,56 @@ body.home-view main {
 
 /* 卓。上半分は写真（オフィスと、向かいに座っている秘書子）、
    その下に木目を継ぎ足して札を並べる場所にする。
-   写真の天板は下1/3しかなく、16枚を並べる高さが足りないため。
-   継ぎ目の色 #835847 は写真の切り口（縦70%の位置）から採った実測値。
-   写真を差し替えたら、切り口の割合（--band）と色も測り直すこと。 */
+   写真の天板だけでは24枚を並べる高さが足りないため。
+
+   写真は3枚（ふだん・悔しい・嬉しい）を勝敗で丸ごと差し替える。
+   3枚は「天板が木目だけになる行」の位置が違うので、拡大率(--zoom)と
+   上の切り落とし量(--shift)、継ぎ目の色(--wood-*)を1枚ずつ実測して持たせる。
+   --k は「見せる高さ ÷ 幅」。3枚とも人物が切れない最小値として .545 を採った
+   （これを大きくすると卓が縦に伸び、小さくすると人物の頭や手が切れる）。
+   写真を差し替えたら、この4つを測り直すこと。 */
 .scene {
-  /* 写真(1200x896)のうち上から76%だけを見せる。76%は「手や袖が写り込まなくなり、
-     切り口の一行がぜんぶ木目になる」位置（実測）。ここより上で切ると、
-     継ぎ足した木目との色が合わずに横線が見えてしまう。
-     写真の左右には細い枠があるので、105%に広げて枠を切り落とす。
-     見せる高さ ÷ 幅 = 1.05 × (896/1200) × 0.76 = 0.596 */
-  width: min(100%, 500px);
-  margin: 6px auto 0;
+  --k: .545;
+  --zoom: 100%;
+  --shift: 2.34%;
+  --wood-top: #77594e;
+  --wood-bottom: #70473a;
+  width: min(100%, 650px);
+  margin: 4px auto 0;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 12px 28px rgba(22, 48, 43, .26);
 }
+.scene.mood-sulk { --zoom: 105.44%; --shift: 23.09%; --wood-top: #5c3c2f; --wood-bottom: #543128; }
+.scene.mood-joy  { --zoom: 105.44%; --shift: 14.57%; --wood-top: #725648; --wood-bottom: #57342a; }
 
 .scene-figure {
   position: relative;
-  aspect-ratio: 1 / .596;          /* 下を切って、天板が木目だけになる行で止める */
-  background-image: url('../../assets/games/table-scene.jpg');
-  background-size: 105% auto;      /* 左右の枠を切り落とすぶんだけ広げる */
-  background-position: center top;
-  background-repeat: no-repeat;
+  overflow: hidden;
+  aspect-ratio: 1 / var(--k);
+  background: #dfe6ea;   /* 写真が読めないときの下地（オフィスの壁の色） */
 }
+.scene-photo {
+  position: absolute;
+  left: 50%;
+  top: calc(-1 * var(--shift));
+  width: var(--zoom);      /* 写真の左右の枠を切り落とすぶんだけ広げる */
+  transform: translateX(-50%);
+  display: block;
+}
+/* クラスで display を指定する要素は、hidden を必ず打ち消す
+   （既定の [hidden]{display:none} はクラス指定に負ける） */
+.scene-photo[hidden] { display: none; }
+.scene-photo.sulk { --zoom: 105.44%; --shift: 23.09%; }
+.scene-photo.joy  { --zoom: 105.44%; --shift: 14.57%; }
 
 /* 写真の天板のつづき。ここに札や駒を置く */
 .scene-table {
   padding: 12px 16px;
   background:
     repeating-linear-gradient(180deg, rgba(0, 0, 0, .05) 0 1px, rgba(255, 255, 255, .022) 1px 3px, transparent 3px 11px),
-    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .05), transparent 70%),
     linear-gradient(90deg, rgba(255, 255, 255, .05), transparent 22%, transparent 78%, rgba(255, 255, 255, .05)),
-    linear-gradient(180deg, #7c5b4e 0%, #775043 45%, #70473b 100%);
+    linear-gradient(180deg, var(--wood-top) 0%, var(--wood-bottom) 100%);
   color: rgba(255, 255, 255, .92);
 }
 
@@ -688,15 +705,13 @@ body.home-view main {
   z-index: 2;
   left: 3%;
   top: 5%;
-  max-width: 42%;
-  padding: 9px 13px;
+  max-width: 38%;
+  padding: 9px 14px;
   border-radius: 14px;
   background: #fff;
   color: var(--text);
   box-shadow: 0 4px 14px rgba(0, 0, 0, .32);
 }
-/* クラスで display を指定する要素は、hidden を必ず打ち消す
-   （既定の [hidden]{display:none} はクラス指定に負ける） */
 .scene-bubble[hidden] { display: none; }
 .scene-bubble p { margin: 0; font-size: 13px; line-height: 1.6; }
 .scene-bubble::after {
@@ -716,14 +731,14 @@ body.home-view main {
   justify-content: center;
   align-items: center;
   gap: 14px;
-  min-height: 95px;
+  min-height: 97px;
 }
-.seat-cards .pcard, .seat-cards .pslot { width: 68px; height: 95px; }
+.seat-cards .pcard, .seat-cards .pslot { width: 70px; height: 97px; }
 .seat-cards .ppip { font-size: 30px; }
 .seat-label {
   display: block;
   width: 104px;
-  margin: 10px auto 0;
+  margin: 7px auto 0;
   text-align: center;
   font-size: 11.5px;
   letter-spacing: .1em;
@@ -853,13 +868,13 @@ button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 /* --- 神経衰弱の盤面 --- */
 
 .memory-area { display: flex; justify-content: center; align-items: flex-start; gap: 18px; }
-.memory-grid { display: grid; grid-template-columns: repeat(8, 46px); gap: 7px; }
-.memory-grid .pcard { width: 46px; height: 64px; }
-.memory-grid .pcard .ppip { font-size: 21px; }
+.memory-grid { display: grid; grid-template-columns: repeat(8, 52px); gap: 8px; }
+.memory-grid .pcard { width: 52px; height: 72px; }
+.memory-grid .pcard .ppip { font-size: 23px; }
 .memory-grid .pcard .pcorner { font-size: 11px; }
 .memory-grid .pcard .pcorner-suit { font-size: 10px; }
-.memory-grid .pslot { width: 46px; height: 64px; }
-.memory-side { display: flex; flex-direction: row; justify-content: center; gap: 28px; margin-top: 8px; }
+.memory-grid .pslot { width: 52px; height: 72px; }
+.memory-side { display: flex; flex-direction: column; gap: 12px; padding-top: 2px; }
 
 /* 取った組は実際に重ねて置く。数字だけより、取った量が目で分かる */
 .pile-stack { position: relative; height: 40px; width: 52px; }
@@ -903,7 +918,7 @@ button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 
 /* 盤面のマス。札は置いたまま、取られたら消える（取った人の山に移った見え方）。
    下に敷いたへこみが残るので、どこに何枚あったかが分かる。 */
-.memory-slot { position: relative; width: 46px; height: 64px; }
+.memory-slot { position: relative; width: 52px; height: 72px; }
 .memory-slot .pslot { position: absolute; inset: 0; width: 100%; height: 100%; }
 .memory-slot .pcard {
   position: absolute;
@@ -917,7 +932,7 @@ button.pcard:focus-visible { outline: 2px solid #fff; outline-offset: 3px; borde
 /* 秘書子側とあなた側のあいだ。卓の中央線 */
 .table-middle {
   height: 1px;
-  margin: 8px 12%;
+  margin: 6px 14%;
   background: rgba(255, 255, 255, .12);
 }
 
@@ -947,26 +962,5 @@ body.game-view main { padding-bottom: 14px; }
   background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .62));
 }
 
-/* 負けたときのカットイン。写真の秘書子は表情が変わらないので、
-   別に描いてもらった顔を卓の手前に寄せて出す。 */
-.scene-cutin {
-  position: absolute;
-  z-index: 1;
-  left: 50%;
-  bottom: 0;
-  width: 46%;
-  aspect-ratio: 1;
-  transform: translateX(-50%);
-  object-fit: cover;
-  object-position: center 22%;
-  /* 左右をぼかして背景のオフィスに溶かす。四角い板を貼ったように見せない
-     （同じ部屋の絵なので、寄りの絵に切り替わったように見える） */
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
-  animation: cutin-rise .3s ease-out;
-}
-.scene-cutin[hidden] { display: none; }
-@keyframes cutin-rise {
-  from { transform: translateX(-50%) translateY(18px); opacity: 0; }
-  to { transform: translateX(-50%); opacity: 1; }
+
 }
