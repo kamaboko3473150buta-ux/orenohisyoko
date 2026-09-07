@@ -36,8 +36,9 @@ window.Hishoko = (function () {
   function paintBubbleVisibility() {
     const visible = !collapsed && hasText;
     bubble.hidden = !visible;
-    // 吹き出しが出ている間は本文側に右余白を作り、入力欄や一覧に重ならないようにする
-    // （右下の空きスペースを使う。画面が狭いときはCSS側で余白を付けない）。
+    // 本文側の右余白は styles.css の main{max-width} で常に空けてある。
+    // 吹き出しの出入りで本文の幅が変わると、入力中に行が折り返し直されて落ち着かない。
+    // このクラスは「いま何か言っているか」を外から見たいとき用に残しておく。
     document.body.classList.toggle('hishoko-open', visible);
   }
 

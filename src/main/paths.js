@@ -13,6 +13,7 @@ function makePaths(baseDir) {
     history: path.join(baseDir, 'history.json'),
     usage: path.join(baseDir, 'usage.json'),
     tasks: path.join(baseDir, 'tasks.json'),
+    window: path.join(baseDir, 'window.json'),
   };
 }
 

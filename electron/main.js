@@ -4,6 +4,7 @@ const { app, BrowserWindow, ipcMain, safeStorage, screen } = require('electron')
 const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
+const { resolveBounds, boundsToSave, MIN_SIZE } = require('../src/main/window-state');
 const { summarize } = require('../src/main/usage');
 const { MODELS, FEATURES } = require('../src/main/models');
 const contactsLib = require('../src/main/contacts');
@@ -16,16 +17,30 @@ const translate = require('../src/main/translate');
 app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
 const PATHS = makePaths(app.getPath('userData'));
 
+// ウィンドウの形を覚えておき、次に開いたときは同じ形で開く。
+// 閉じるときに書き出す（移動やサイズ変更のたびに書くと、書き込みが多くなりすぎる）。
+function saveWindowState(win) {
+  try {
+    if (!win || win.isDestroyed()) return;
+    // 最大化中は「元に戻したときの形」を残す。最大化した形を覚えると次に戻せなくなる。
+    const bounds = win.isMaximized() || win.isFullScreen() ? win.getNormalBounds() : win.getBounds();
+    const value = boundsToSave(bounds);
+    if (value) writeJson(PATHS.window, value);
+  } catch {
+    // 覚えられなくても起動と終了は止めない
+  }
+}
+
 function createWindow() {
-  // 880は「息抜きの卓（写真＋札を並べる天板）が縮まずに収まる」高さ。
-  // ただし画面（タスクバーを除いた作業領域）に入らない大きさで作ると、
-  // ウィンドウが画面外にはみ出したり勝手に詰められたりするので、そこで頭打ちにする。
-  // 入らないぶんは画面側で卓ごと小さくして吸収する（views/game-ui.js の fitScene）。
-  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  // 前回の形を使う。無ければ 1140x880（息抜きの卓が縮まずに収まる大きさ）。
+  // どちらにせよ画面の作業領域に収まるかを確かめてから使う。決め打ちで作ると、
+  // 画面の小さい環境ではみ出す（1280x720 の画面に高さ880で作ってしまった実例あり）。
+  const bounds = resolveBounds(readJson(PATHS.window, null), screen.getPrimaryDisplay().workArea);
 
   const win = new BrowserWindow({
-    width: Math.min(1140, workArea.width - 20),
-    height: Math.min(880, workArea.height - 20),
+    ...bounds,
+    minWidth: MIN_SIZE.width,
+    minHeight: MIN_SIZE.height,
     title: '俺の秘書子',
     // 開発中（npm start）のウィンドウ左上・タスクバー用。
     // パッケージ後は exe に埋め込んだアイコンが使われる。
@@ -37,6 +52,7 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
+  win.on('close', () => saveWindowState(win));
   win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
 }
 

@@ -140,7 +140,11 @@ header button.ghost:hover { color: #fff; background: rgba(255, 255, 255, .16); b
 
 main {
   padding: 16px 20px 44px;
-  max-width: 880px;
+  /* 右下の秘書子（丸枠132px＋吹き出し最大330px）の居場所を最初から空けておく。
+     880px のままだと入力欄がその下にもぐり込む（実機で指摘あり）。
+     560px = サイドバー190px ＋ 秘書子まわり370px。
+     画面が広いときは 880px で頭打ち、狭いときは 360px を下限にする。 */
+  max-width: min(880px, max(360px, calc(100vw - 560px)));
   margin: 0;
 }
 
@@ -480,12 +484,17 @@ button.ghost:hover { background: var(--accent-weak); color: var(--text); }
 body.home-view main {
   padding: 0;
   max-width: none;
+  /* 残りの高さをそのまま使う。100vh から引き算で出すと、ヘッダーの高さが
+     変わったときにその差だけスクロールが出る（実測で8pxはみ出していた）。 */
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .home-office {
   position: relative;
   width: 100%;
-  min-height: calc(100vh - 40px); /* ヘッダーの高さぶんを差し引いた目安 */
+  flex: 1 1 auto;   /* main（＝ヘッダーを除いた残り）いっぱいに広がる */
   background-color: var(--bg);
   background-size: cover;
   background-position: center top;
@@ -564,12 +573,6 @@ body.home-view main {
    これが無いと widget.hidden = true が見た目に効かない
    （トップページで丸枠の秘書子が消えなかった原因）。 */
 .hishoko-widget[hidden] { display: none; }
-
-/* 吹き出しが出ている間だけ、本文の右に居場所を空ける。
-   画面が狭いときは詰めても仕方がないので、広いときだけにする。 */
-@media (min-width: 1000px) {
-  body.hishoko-open main { padding-right: 372px; }
-}
 
 .hishoko-bubble {
   position: relative;
@@ -978,7 +981,8 @@ body.game-view main {
 /* 息抜きの入口。ボードゲームカフェの絵を敷いて、仕事の画面と気分を変える */
 .breaktime-hero {
   position: relative;
-  height: 190px;
+  /* 画面が低いときに一覧が押し出されないよう、高さも画面に合わせる */
+  height: clamp(110px, 22vh, 190px);
   margin-bottom: 14px;
   border-radius: 12px;
   overflow: hidden;

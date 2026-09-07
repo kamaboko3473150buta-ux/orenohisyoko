@@ -90,7 +90,10 @@ const App = {
     Promise.resolve(Views[viewName].render(buffer))
       .then(() => {
         if (myGeneration !== this.generation) return; // すでに別の画面に移っている
-        this.el.appendChild(buffer);
+        // 器そのものではなく中身だけを移す。器をそのまま入れると main と画面の間に
+        // 余計な div が挟まり、main を flex にしたときに高さが伝わらなくなる
+        // （トップページの背景が高さ0になった）。
+        while (buffer.firstChild) this.el.appendChild(buffer.firstChild);
       })
       .catch((err) => {
         if (myGeneration !== this.generation) return;

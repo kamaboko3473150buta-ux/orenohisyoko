@@ -70,10 +70,15 @@ window.GameUI = (function () {
   const FIT_MIN_SCALE = 0.55;   // これ以上は小さくしない（札が読めなくなる）
   const FIT_RESERVE = 62;       // 卓の下に要る高さ（ボタン列＋下余白）
 
-  function fitScene(el) {
+  // 呼ばれた時点ではまだ画面に差し込まれていないことがある（App.go は描き終えてから
+  // 本体に入れる）。requestAnimationFrame で待つと、ウィンドウが最小化されているなど
+  // 描画が止まっている間はコールバックが来ないので、setTimeout で確かめ直す。
+  function fitScene(el, attempt = 0) {
     if (!el) return;
-    const baseWidth = el.getBoundingClientRect().width;
-    if (!baseWidth) return;
+    if (!el.isConnected || !el.getBoundingClientRect().width) {
+      if (attempt < 30) setTimeout(() => fitScene(el, attempt + 1), 16);
+      return;
+    }
 
     function apply() {
       if (!el.isConnected) {
