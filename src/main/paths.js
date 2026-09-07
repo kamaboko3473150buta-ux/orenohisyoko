@@ -14,6 +14,7 @@ function makePaths(baseDir) {
     usage: path.join(baseDir, 'usage.json'),
     tasks: path.join(baseDir, 'tasks.json'),
     window: path.join(baseDir, 'window.json'),
+    docDrafts: path.join(baseDir, 'doc-drafts.json'),
   };
 }
 

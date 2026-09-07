@@ -58,6 +58,7 @@ Views.docgen = {
       brief: '',
       attachments: [], // { ok, name, chars, originalChars, truncated, error, text }
       imageCount: 0, // 添付から抽出できた画像の枚数（プレゼン資料でのみ使う）
+      draftId: '', // 下書きのid。同じ下書きを上書きするために覚えておく
       outline: null, // 通常: { title, sections: [{ heading, points }] } / プレゼン: deck
       doc: null, // 通常: { title, sections: [{ heading, paragraphs, bullets }] } / プレゼン: deck
     };
@@ -65,6 +66,25 @@ Views.docgen = {
 
     function isSlideType() {
       return state.typeId === 'presentation';
+    }
+
+    // 作りかけを下書きに残す。入力画面からも、本文まで作ったあとからも呼べるよう
+    // state だけを見る（作り直すとAPI費用がもう一度かかるので、本文も一緒に残す）。
+    async function saveDraftFromState() {
+      const res = await window.hishoko.docDraftSave({
+        id: state.draftId,
+        typeId: state.typeId,
+        brief: state.brief,
+        format: state.format,
+        // 中身ではなく場所だけを残す（他人の資料をアプリに溜め込まないため）
+        filePaths: state.attachments.filter((a) => a.ok && a.path).map((a) => a.path),
+        outline: state.outline,
+        doc: state.doc,
+      });
+      // 同じ下書きを何度も保存しても増えないよう、idを覚えておく
+      state.draftId = res.draft.id;
+      App.toast(`下書き「${res.draft.name}」を保存しました`);
+      return res;
     }
 
     function totalChars() {
@@ -270,9 +290,68 @@ Views.docgen = {
         }
       });
 
+      // --- 下書き（作りかけを残して、あとから続ける） ---
+      const draftListEl = App.h('div', { class: 'draft-list' });
+
+      async function renderDrafts() {
+        const { drafts } = await window.hishoko.docDraftList();
+        draftListEl.innerHTML = '';
+        if (!drafts.length) {
+          draftListEl.appendChild(App.h('div', { class: 'status', text: '保存した下書きはまだありません。' }));
+          return;
+        }
+        for (const d of drafts) {
+          const when = new Date(d.savedAt);
+          const p = (n) => String(n).padStart(2, '0');
+          const note = [
+            `${when.getFullYear()}/${p(when.getMonth() + 1)}/${p(when.getDate())} ${p(when.getHours())}:${p(when.getMinutes())}`,
+            d.fileCount ? `参考資料${d.fileCount}件` : '',
+            d.hasDoc ? '本文まで' : d.hasOutline ? '構成案まで' : '入力のみ',
+          ].filter(Boolean).join(' / ');
+          draftListEl.appendChild(App.h('div', { class: 'draft-row' }, [
+            App.h('div', { class: 'draft-main' }, [
+              App.h('div', { class: 'draft-name', text: d.name }),
+              App.h('div', { class: 'draft-note', text: note }),
+            ]),
+            App.h('button', { class: 'secondary', text: '開く', onclick: () => openDraft(d.id) }),
+            App.h('button', {
+              class: 'ghost',
+              text: '✕',
+              title: '削除',
+              onclick: async () => { await window.hishoko.docDraftRemove(d.id); renderDrafts(); },
+            }),
+          ]));
+        }
+      }
+
+      async function openDraft(id) {
+        const res = await window.hishoko.docDraftOpen(id);
+        if (!res.ok) { App.toast(res.message || '開けませんでした'); return; }
+        state.draftId = res.draft.id;
+        state.typeId = res.draft.typeId;
+        state.brief = res.draft.brief;
+        state.format = res.draft.format || findType(state.typeId).defaultFormat;
+        state.attachments = res.attachments;
+        state.outline = res.draft.outline;
+        state.doc = res.draft.doc;
+        // 無くなっていた参考資料は黙って減らさず、必ず知らせる
+        if (res.missing.length) {
+          App.toast(`${res.missing.length}件の参考資料が見つかりませんでした（移動・削除された可能性があります）`);
+        }
+        if (state.doc) renderBodyScreen();
+        else if (state.outline) renderOutlineScreen();
+        else renderInputScreen();
+      }
+
+      async function saveDraft() {
+        await saveDraftFromState();
+        renderDrafts();
+      }
+
       renderAttachList();
       renderSummary();
       renderImageInfo();
+      renderDrafts();
 
       showScreen(App.h('div', {}, [
         App.h('div', { class: 'card' }, [
@@ -298,8 +377,14 @@ Views.docgen = {
           errorEl,
           App.h('div', { class: 'actions' }, [
             App.h('div', { class: 'model-inline' }, [App.h('span', { text: 'モデル' }), modelSelect]),
+            App.h('button', { class: 'secondary', text: '下書きに保存', onclick: saveDraft }),
             outlineBtn,
           ]),
+        ]),
+        App.h('div', { class: 'card' }, [
+          App.h('h2', { text: '📝 下書き' }),
+          App.h('p', { text: '作りかけを残して、あとから続けられます。参考資料は場所だけを覚えるので、ファイルを移動すると開けなくなります。' }),
+          draftListEl,
         ]),
       ]));
     }
@@ -521,7 +606,9 @@ Views.docgen = {
             formatSelect,
           ]),
           errorEl,
-          App.h('div', { class: 'actions' }, [backBtn, saveBtn]),
+          App.h('div', { class: 'actions' }, [backBtn,
+            App.h('button', { class: 'secondary', text: '下書きに保存', onclick: saveDraftFromState }),
+            saveBtn]),
         ]),
       ]));
     }
@@ -794,7 +881,9 @@ Views.docgen = {
           ]),
           App.h('div', { class: 'status', text: '出力形式: PowerPoint' }),
           errorEl,
-          App.h('div', { class: 'actions' }, [backBtn, saveBtn]),
+          App.h('div', { class: 'actions' }, [backBtn,
+            App.h('button', { class: 'secondary', text: '下書きに保存', onclick: saveDraftFromState }),
+            saveBtn]),
         ]),
       ]));
     }

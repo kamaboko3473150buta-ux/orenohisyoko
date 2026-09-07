@@ -388,11 +388,11 @@ async function readFileText(filePath) {
       originalChars,
       truncated,
       error: null,
-      // スキャンPDFのときだけ、AIに画像として読ませるための情報を添える。
-      // path はメインプロセス内でしか使わない（画面には渡さない）。
+      // scanned はスキャンPDF（AIに画像として読ませる）かどうか。
+      // path は下書きに残すために画面へも渡す（中身ではなく場所だけを覚えるため）。
       scanned,
       pdfPages,
-      path: scanned ? String(filePath) : '',
+      path: String(filePath),
     };
   } catch (err) {
     return {

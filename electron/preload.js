@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('hishoko', {
   // 選べるモデルの一覧・機能ごとの既定（Task 33）
   modelsList: () => ipcRenderer.invoke('models:list'),
 
+  // 資料作成の下書き
+  docDraftList: () => ipcRenderer.invoke('doc:draftList'),
+  docDraftSave: (draft) => ipcRenderer.invoke('doc:draftSave', draft),
+  docDraftOpen: (id) => ipcRenderer.invoke('doc:draftOpen', id),
+  docDraftRemove: (id) => ipcRenderer.invoke('doc:draftRemove', id),
+
   // 受信確認（特定の相手からメールが届いているか）
   mailcheckMeta: () => ipcRenderer.invoke('mailcheck:meta'),
   mailcheckRun: (patch) => ipcRenderer.invoke('mailcheck:run', patch),

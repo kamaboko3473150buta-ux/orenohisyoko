@@ -1048,3 +1048,23 @@ body.game-view main {
   border: none;
 }
 .chip-remove:hover { background: var(--line); color: var(--text); border: none; }
+
+/* --- 資料作成の下書き --- */
+
+.draft-list { margin-top: 8px; }
+.draft-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.draft-main { flex: 1 1 auto; min-width: 0; }
+.draft-name {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.draft-note { font-size: 12px; color: var(--muted); }
+.draft-row button { flex: 0 0 auto; }

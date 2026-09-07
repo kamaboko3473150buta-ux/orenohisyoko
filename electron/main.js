@@ -69,6 +69,8 @@ const saveHistory = (list) => writeJson(PATHS.history, list);
 const getUsage = () => readJson(PATHS.usage, {});
 const saveUsage = (store) => writeJson(PATHS.usage, store);
 const getTasks = () => readJson(PATHS.tasks, []);
+const getDocDrafts = () => readJson(PATHS.docDrafts, []);
+const saveDocDrafts = (list) => writeJson(PATHS.docDrafts, list);
 const saveTasks = (list) => writeJson(PATHS.tasks, list);
 
 function registerCommonHandlers() {
@@ -171,7 +173,7 @@ app.whenReady().then(() => {
   registerCommonHandlers();
   mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage });
   tasksFeature.register({ getSettings, getTasks, saveTasks, getUsage, saveUsage });
-  docgen.register({ getSettings, getUsage, saveUsage });
+  docgen.register({ getSettings, getUsage, saveUsage, getDocDrafts, saveDocDrafts });
   translate.register({ getSettings, getUsage, saveUsage });
   createWindow();
 

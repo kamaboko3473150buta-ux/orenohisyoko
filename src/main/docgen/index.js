@@ -10,6 +10,7 @@ const { ipcMain, dialog, BrowserWindow } = require('electron');
 const { DOC_TYPES } = require('./types');
 const { readFiles } = require('./readers');
 const scannedPdf = require('./scanned-pdf');
+const drafts = require('./drafts');
 const { extractImages, MAX_IMAGES } = require('./images');
 const {
   buildOutlineSystemPrompt, buildOutlineUserPrompt, parseOutlineJson,
@@ -92,7 +93,9 @@ async function cleanupImageSession() {
   }));
 }
 
-function register({ getSettings, getUsage, saveUsage }) {
+function register({
+  getSettings, getUsage, saveUsage, getDocDrafts, saveDocDrafts,
+}) {
   // 資料の種類一覧（チップの表示・guideの埋め込みに使う）
   ipcMain.handle('doc:types', () => ({ types: DOC_TYPES }));
 
@@ -127,6 +130,43 @@ function register({ getSettings, getUsage, saveUsage }) {
 
   // 新しい資料作成を始めるときに呼ぶ。前回抽出した画像と一時フォルダを消してからゼロに戻す
   // （資料作成画面を開くたびに画面側が呼ぶ。他人の資料の画像をいつまでも残さないため）。
+  // --- 下書き（作りかけを残して、あとから続ける） ---
+  // 参考資料は中身ではなく場所だけを持ち、開くときに読み直す。
+
+  ipcMain.handle('doc:draftList', () => ({
+    drafts: drafts.normalizeList(getDocDrafts()).map(drafts.toSummary),
+  }));
+
+  ipcMain.handle('doc:draftSave', (_e, draft) => {
+    const { list, draft: saved } = drafts.saveDraft(getDocDrafts(), draft);
+    saveDocDrafts(list);
+    return { ok: true, draft: drafts.toSummary(saved) };
+  });
+
+  ipcMain.handle('doc:draftRemove', (_e, id) => {
+    saveDocDrafts(drafts.removeDraft(getDocDrafts(), id));
+    return { ok: true };
+  });
+
+  // 開くときに参考資料を読み直す。無くなっていたファイルは missing で知らせる
+  // （黙って減らすと、何を添付していたか分からなくなる）。
+  ipcMain.handle('doc:draftOpen', async (_e, id) => {
+    const draft = drafts.findDraft(getDocDrafts(), id);
+    if (!draft) return { ok: false, message: 'この下書きは見つかりませんでした。' };
+
+    const results = await readFiles(draft.filePaths);
+    const missing = [];
+    results.forEach((r, i) => {
+      if (!r.ok) missing.push({ name: r.name || draft.filePaths[i], error: r.error });
+      if (r && r.scanned && r.path) {
+        scannedSession.push({
+          name: r.name, path: r.path, pdfPages: r.pdfPages, scanned: true,
+        });
+      }
+    });
+    return { ok: true, draft, attachments: results.filter((r) => r.ok), missing };
+  });
+
   ipcMain.handle('doc:resetImages', async () => {
     await cleanupImageSession();
     scannedSession = [];
