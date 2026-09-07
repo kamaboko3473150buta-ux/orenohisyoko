@@ -11,6 +11,7 @@ const SIDEBAR_SECTIONS = {
   reply: 'menu',
   preview: 'menu',
   history: 'menu',
+  mailcheck: 'menu',
   tasks: 'menu',
   docgen: 'menu',
   translate: 'menu',
@@ -43,6 +44,7 @@ const PARENT_VIEW = {
   compose: 'mailmenu',
   reply: 'mailmenu',
   history: 'mailmenu',
+  mailcheck: 'mailmenu',
   addressbook: 'mailmenu',
   preview: 'mailmenu',
 };

@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('hishoko', {
   // 選べるモデルの一覧・機能ごとの既定（Task 33）
   modelsList: () => ipcRenderer.invoke('models:list'),
 
+  // 受信確認（特定の相手からメールが届いているか）
+  mailcheckMeta: () => ipcRenderer.invoke('mailcheck:meta'),
+  mailcheckRun: (patch) => ipcRenderer.invoke('mailcheck:run', patch),
+  mailcheckTest: (patch) => ipcRenderer.invoke('mailcheck:test', patch),
+  mailcheckOpen: (message) => ipcRenderer.invoke('mailcheck:open', message),
+
   // メール文面作成
   mailMeta: () => ipcRenderer.invoke('mail:meta'),
   mailHistory: () => ipcRenderer.invoke('mail:history'),

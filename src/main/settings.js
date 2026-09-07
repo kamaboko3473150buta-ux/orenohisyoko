@@ -4,6 +4,7 @@
 
 const { readJson, writeJson } = require('./jsonfile');
 const { FEATURES, findModel } = require('./models');
+const { normalizeWatchList, normalizeMatch, normalizeDays, DEFAULT_DAYS } = require('./mailcheck/query');
 
 // 機能ごとの既定モデル（FEATURESのdefaultModelそのまま）。
 // 例: { mail: 'claude-opus-5', task: 'claude-opus-5', docgen: 'claude-sonnet-5' }
@@ -15,7 +16,29 @@ const DEFAULT_SETTINGS = {
   defaultMailer: 'outlook',
   defaultTaskInput: 'manual',
   models: DEFAULT_MODELS,
+  // 受信確認（メールが届いているかの確認）。アプリパスワードは別枠で暗号化する。
+  mailcheck: {
+    provider: 'gmail',
+    gmailAddress: '',
+    watch: [],
+    match: 'from',
+    unreadOnly: true,
+    days: DEFAULT_DAYS,
+  },
 };
+
+// 保存されている受信確認の設定を、そのまま信用せず形にはめ直す。
+function normalizeMailcheck(raw) {
+  const r = (raw && typeof raw === 'object') ? raw : {};
+  return {
+    provider: r.provider === 'outlook' ? 'outlook' : 'gmail',
+    gmailAddress: typeof r.gmailAddress === 'string' ? r.gmailAddress.trim() : '',
+    watch: normalizeWatchList(r.watch),
+    match: normalizeMatch(r.match),
+    unreadOnly: r.unreadOnly !== false,
+    days: normalizeDays(r.days),
+  };
+}
 
 // 保存されているmodelsに欠け・未知の値があっても、機能ごとの既定へ倒す
 // （資料作成の既定はSonnet 5であり、一律Opus 5に倒すと既定が変わってしまうため、
@@ -43,8 +66,10 @@ function loadSettings(filePath, crypto) {
     // 未知の値は既定の'manual'に倒す（誤った値でAI取り込みが勝手に選ばれないように）。
     defaultTaskInput: raw.defaultTaskInput === 'ai' ? 'ai' : DEFAULT_SETTINGS.defaultTaskInput,
     models: normalizeModels(raw.models),
+    mailcheck: normalizeMailcheck(raw.mailcheck),
     apiKey: '',
     encrypted: false,
+    mailAppPassword: '',
   };
 
   if (raw.apiKeyEncrypted) {
@@ -57,6 +82,17 @@ function loadSettings(filePath, crypto) {
   } else if (raw.apiKeyPlain) {
     settings.apiKey = raw.apiKeyPlain;
     settings.encrypted = false;
+  }
+
+  // Gmailのアプリパスワード。APIキーと同じやり方で暗号化して置く。
+  if (raw.mailAppPasswordEncrypted) {
+    try {
+      settings.mailAppPassword = crypto.decryptString(Buffer.from(raw.mailAppPasswordEncrypted, 'base64'));
+    } catch {
+      settings.mailAppPassword = '';   // 復号できない（別PC等）。入れ直してもらう
+    }
+  } else if (raw.mailAppPasswordPlain) {
+    settings.mailAppPassword = raw.mailAppPasswordPlain;
   }
   return settings;
 }
@@ -78,6 +114,25 @@ function saveSettings(filePath, patch, crypto) {
       }
     }
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'mailAppPassword')) {
+    // アプリパスワードは「abcd efgh ijkl mnop」の形で貼られることが多いので空白を落とす
+    const pass = String(patch.mailAppPassword || '').replace(/\s/g, '');
+    delete next.mailAppPasswordEncrypted;
+    delete next.mailAppPasswordPlain;
+    if (pass) {
+      if (crypto.isEncryptionAvailable()) {
+        next.mailAppPasswordEncrypted = Buffer.from(crypto.encryptString(pass)).toString('base64');
+      } else {
+        next.mailAppPasswordPlain = pass;
+      }
+    }
+  }
+
+  // 受信確認の設定は入れ子。片方だけ渡しても他が消えないようマージする。
+  if (Object.prototype.hasOwnProperty.call(patch, 'mailcheck')) {
+    next.mailcheck = normalizeMailcheck({ ...(raw.mailcheck || {}), ...(patch.mailcheck || {}) });
+  }
+
   for (const field of ['signature', 'defaultTone', 'defaultMailer', 'defaultTaskInput']) {
     if (Object.prototype.hasOwnProperty.call(patch, field)) next[field] = patch[field];
   }
@@ -92,4 +147,4 @@ function saveSettings(filePath, patch, crypto) {
   return loadSettings(filePath, crypto);
 }
 
-module.exports = { DEFAULT_SETTINGS, loadSettings, saveSettings };
+module.exports = { DEFAULT_SETTINGS, loadSettings, saveSettings, normalizeMailcheck };

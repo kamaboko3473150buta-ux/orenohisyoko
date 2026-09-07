@@ -1,6 +1,6 @@
 // electron/main.js
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, screen, shell } = require('electron');
 const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
 const { readJson, writeJson } = require('../src/main/jsonfile');
@@ -12,6 +12,7 @@ const mailCompose = require('../src/main/mail-compose');
 const tasksFeature = require('../src/main/tasks-feature');
 const docgen = require('../src/main/docgen');
 const translate = require('../src/main/translate');
+const mailcheck = require('../src/main/mailcheck');
 
 // 保存先を明示的に固定する（productNameが日本語でもフォルダ名を英字に保つため）
 app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
@@ -117,6 +118,47 @@ function registerCommonHandlers() {
   ipcMain.handle('settings:clearHistory', () => { saveHistory([]); return { ok: true }; });
 
   // API利用状況（Task 19）。金額はこのアプリでの利用実績からの概算。
+  // --- 受信確認（メールが届いているかの確認） ---
+  // AIは使わないので、費用の記録もしない。
+  ipcMain.handle('mailcheck:meta', () => ({
+    providers: mailcheck.PROVIDERS,
+    maxDays: mailcheck.query.MAX_DAYS,
+  }));
+
+  ipcMain.handle('mailcheck:run', async (_e, patch) => {
+    const settings = getSettings();
+    const conf = { ...settings.mailcheck, ...(patch || {}) };
+    return mailcheck.check({
+      provider: conf.provider,
+      address: conf.gmailAddress,
+      appPassword: settings.mailAppPassword,
+      watch: conf.watch,
+      match: conf.match,
+      unreadOnly: conf.unreadOnly,
+      days: conf.days,
+    });
+  });
+
+  ipcMain.handle('mailcheck:test', async (_e, patch) => {
+    const settings = getSettings();
+    const conf = { ...settings.mailcheck, ...(patch || {}) };
+    return mailcheck.testConnection({
+      provider: conf.provider,
+      address: conf.gmailAddress,
+      // 入力中の値で試せるようにする（保存前に確かめたいことが多いため）
+      appPassword: (patch && patch.appPassword) || settings.mailAppPassword,
+    });
+  });
+
+  ipcMain.handle('mailcheck:open', async (_e, message) => {
+    const result = await mailcheck.openMessage(message);
+    if (result.ok && result.url) {
+      await shell.openExternal(result.url);
+      return { ok: true };
+    }
+    return result;
+  });
+
   ipcMain.handle('usage:get', () => summarize(getUsage()));
   ipcMain.handle('usage:clear', () => { saveUsage({}); return { ok: true }; });
 }

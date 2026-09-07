@@ -1007,3 +1007,44 @@ body.game-view main {
 
 
 }
+
+/* --- 受信確認 --- */
+
+.check-inline { display: flex; align-items: center; gap: 8px; }
+.check-inline input[type="checkbox"] { width: auto; }
+
+.check-list { margin-top: 10px; }
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+.check-row:hover { background: var(--accent-weak); }
+.check-when { flex: 0 0 116px; font-size: 12px; color: var(--muted); }
+.check-main { flex: 1 1 auto; min-width: 0; }
+.check-subject {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.check-from { font-size: 12px; color: var(--muted); }
+.check-flag { flex: 0 0 34px; font-size: 12px; color: var(--accent); font-weight: 600; }
+.check-row.unread .check-subject { font-weight: 600; }
+
+/* 追加した相手を消すボタン */
+.chip-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 50%;
+  font-size: 12px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+}
+.chip-remove:hover { background: var(--line); color: var(--text); border: none; }
