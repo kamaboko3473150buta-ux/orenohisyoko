@@ -3,7 +3,9 @@ const path = require('node:path');
 const { app, BrowserWindow, ipcMain, safeStorage, screen, shell } = require('electron');
 const { APP_DIR_NAME, makePaths } = require('../src/main/paths');
 const { loadSettings, saveSettings } = require('../src/main/settings');
-const { readJson, writeJson } = require('../src/main/jsonfile');
+const {
+  readJson, readJsonDetailed, writeJson, quarantine,
+} = require('../src/main/jsonfile');
 const { resolveBounds, boundsToSave, MIN_SIZE } = require('../src/main/window-state');
 const { summarize } = require('../src/main/usage');
 const { MODELS, FEATURES } = require('../src/main/models');
@@ -64,6 +66,23 @@ const getSettings = () => loadSettings(PATHS.settings, safeStorage);
 // 残っていても migrate が必ず新形式に揃えるので、読み込み側は常に新形式を前提にできる。
 const getContacts = () => contactsLib.migrate(readJson(PATHS.contacts, []));
 const saveContacts = (book) => writeJson(PATHS.contacts, book);
+
+// 起動時の移行。旧形式（宛先履歴の配列）なら新形式にして保存し直すが、
+// **読めなかったときは何も書かない**。以前はここで空を書き戻していて、
+// アドレス帳がまるごと消えることがあった。
+// 壊れて読めないファイルは消さずに退避し、手で拾い直せるようにする。
+function migrateContactsOnce() {
+  const { value, state } = readJsonDetailed(PATHS.contacts, []);
+  if (state === 'broken') {
+    const kept = quarantine(PATHS.contacts);
+    console.error('アドレス帳が読めませんでした。退避しました:', kept || '(退避できず)');
+    return;
+  }
+  if (state === 'missing') return;          // 初回起動。書く必要が無い
+  const migrated = contactsLib.migrate(value);
+  // 形が変わったときだけ書く。毎回書き直すと、書き込みのたびに事故の機会が増える。
+  if (JSON.stringify(migrated) !== JSON.stringify(value)) saveContacts(migrated);
+}
 const getHistory = () => readJson(PATHS.history, []);
 const saveHistory = (list) => writeJson(PATHS.history, list);
 const getUsage = () => readJson(PATHS.usage, {});
@@ -164,14 +183,37 @@ function registerCommonHandlers() {
     return result;
   });
 
+  // 保存データのフォルダを開く。控えを取りたいときに自分でコピーできるようにする。
+  ipcMain.handle('settings:openDataDir', async () => {
+    await shell.openPath(app.getPath('userData'));
+    return { ok: true, dir: app.getPath('userData') };
+  });
+
   ipcMain.handle('usage:get', () => summarize(getUsage()));
   ipcMain.handle('usage:clear', () => { saveUsage({}); return { ok: true }; });
 }
 
+// 二重に起動させない。
+// 同じ保存フォルダを2つのアプリで取り合うと、片方が書いた設定やアドレス帳を
+// もう片方が上書きして消してしまう（バージョンを上げたときに実際に起きた。
+// 前の版を開いたまま新しい版を入れて起動すると、両方が動いてしまう）。
+// 2つ目が起動したら、すでに開いている窓を前に出して自分は終わる。
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
+}
+
 app.whenReady().then(() => {
   // 起動時に一度、contacts.json が旧形式（宛先履歴の配列）なら新形式へ移行して保存し直す。
-  // 既存ユーザーの宛先履歴（アドレス帳の連絡先の元）を消さないための移行。
-  saveContacts(getContacts());
+  // ただし**読めなかったときは書き戻さない**。以前はここで、読めなかった既定値（空）を
+  // そのまま保存してしまい、アドレス帳が消えることがあった。
+  migrateContactsOnce();
 
   registerCommonHandlers();
   mailCompose.register({ getSettings, getContacts, saveContacts, getHistory, saveHistory, getUsage, saveUsage });

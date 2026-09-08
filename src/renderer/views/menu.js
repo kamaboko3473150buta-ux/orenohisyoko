@@ -22,10 +22,6 @@ Views.menu = {
       App.h('h2', { text: '✉ メール文面作成' }),
       App.h('p', { text: '新規メールの作成・返信文の作成・作成した文面の履歴はこちらから' }),
     ]));
-    root.appendChild(App.h('div', { class: 'card clickable', onclick: () => App.go('tasks') }, [
-      App.h('h2', { text: '🗂 タスク・スケジュール管理' }),
-      App.h('p', { text: '予定とやることを1つにまとめ、今日やるべきことを案内します' }),
-    ]));
     root.appendChild(App.h('div', { class: 'card clickable', onclick: () => App.go('docgen') }, [
       App.h('h2', { text: '📄 資料作成' }),
       App.h('p', { text: 'プレゼン・レポート・議事録などを構成案から仕上げ、Word/PDFで書き出します' }),

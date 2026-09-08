@@ -140,9 +140,22 @@ Views.settings = {
       App.toast('文面履歴を消去しました');
     });
 
+    // 保存データの場所。控えを取りたいとき、フォルダごとコピーできるようにする。
+    const openDirBtn = App.h('button', { class: 'secondary', text: '保存フォルダを開く' });
+    openDirBtn.addEventListener('click', () => window.hishoko.openDataDir());
+
     root.appendChild(App.h('div', { class: 'card' }, [
       App.h('div', { class: 'field' }, [App.h('label', { text: '履歴' }), contactsLabel, historyLabel]),
       App.h('div', { class: 'actions' }, [clearContactsBtn, clearHistoryBtn]),
+      App.h('div', { class: 'field' }, [
+        App.h('label', { text: '保存データ' }),
+        App.h('div', {
+          class: 'status',
+          text: '設定・アドレス帳・タスク・履歴はこのフォルダに入っています。バージョンを上げても消えませんが、'
+            + '大事な内容を入れたらフォルダごとコピーして控えを取っておくと安心です。',
+        }),
+        App.h('div', { class: 'actions' }, [openDirBtn]),
+      ]),
     ]));
 
     // API利用状況（Task 19・33）。トークン数はこのアプリで記録した実績、金額はそこからの概算。

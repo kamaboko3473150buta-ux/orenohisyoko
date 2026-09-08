@@ -82,9 +82,11 @@ window.Views = window.Views || {};
       App.setTitle('俺の秘書子');
 
       let dueSoon = null;
+      let tasks = [];
       try {
         const result = await window.hishoko.taskList();
         dueSoon = result && result.dueSoon;
+        tasks = (result && result.tasks) || [];
       } catch {
         // 締切が取れなくても、トップページの表示自体は続ける（時間帯のセリフにする）。
         dueSoon = null;
@@ -119,7 +121,45 @@ window.Views = window.Views || {};
         applyLine(pickLine(pool, current && current.text));
       });
 
+      // トップページから、その場で今日のことを聞けるようにする。
+      // 予定の確認はアプリの中だけで済ませ（AIを使わない＝費用がかからない）、
+      // 相談だけAIに渡す。ここを分けないと、見るだけのつもりで課金される。
+      const actions = App.h('div', { class: 'home-actions' });
+
+      function todayText() {
+        const now = new Date();
+        const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const todays = tasks.filter((t) => t && !t.done && (t.end === ymd || t.start === ymd
+          || (t.start && t.end && t.start <= ymd && ymd <= t.end)));
+        if (todays.length === 0) return '今日の予定はありません。';
+        return todays
+          .map((t) => (t.at ? `${t.at} ${t.title}` : `・${t.title}`))
+          .join('\n');
+      }
+
+      actions.appendChild(App.h('button', {
+        class: 'secondary',
+        text: '今日の予定',
+        onclick: () => { bubbleText.textContent = todayText(); current = null; },
+      }));
+
+      const briefBtn = App.h('button', { text: '今日の進め方を相談する' });
+      briefBtn.addEventListener('click', async () => {
+        briefBtn.disabled = true;
+        bubbleText.textContent = '考えています…';
+        try {
+          // 成功でも失敗でも本文は message に入る（tasks-feature/index.js）
+          const res = await window.hishoko.taskBrief({});
+          bubbleText.textContent = res.message || 'うまく答えられませんでした。';
+          current = null;
+        } finally {
+          briefBtn.disabled = false;
+        }
+      });
+      actions.appendChild(briefBtn);
+
       scene.appendChild(bubble);
+      scene.appendChild(actions);
       root.appendChild(scene);
 
       applyLine(pickLine(linePool(dueSoon, new Date()), null));

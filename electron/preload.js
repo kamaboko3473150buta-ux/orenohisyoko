@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('hishoko', {
   getCounts: () => ipcRenderer.invoke('settings:counts'),
   clearContacts: () => ipcRenderer.invoke('settings:clearContacts'),
   clearHistory: () => ipcRenderer.invoke('settings:clearHistory'),
+  openDataDir: () => ipcRenderer.invoke('settings:openDataDir'),
 
   // API利用状況
   getUsage: () => ipcRenderer.invoke('usage:get'),

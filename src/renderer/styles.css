@@ -1077,3 +1077,15 @@ body.game-view main {
 }
 .doc-image-row input { flex: 1 1 auto; }
 .doc-image-row button { flex: 0 0 auto; }
+
+/* トップページから今日のことを聞くボタン。吹き出しのすぐ下に置く */
+.home-actions {
+  position: absolute;
+  left: 50.5%;
+  bottom: calc(90% - 46px);
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+.home-actions button { flex: 0 0 auto; }
