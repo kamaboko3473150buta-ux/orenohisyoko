@@ -30,7 +30,9 @@ window.Views = window.Views || {};
     ],
     day: [
       { expr: 'normal', text: 'お疲れさまです。何かお手伝いできることはありますか?' },
-      { expr: 'smile', text: '調子はいかがですか? サイドバーから機能を選んでくださいね。' },
+      // 使い方を伝える貴重な一言。ただし「機能を選んでください」だと
+      // アプリの説明書きになってしまうので、秘書子が受ける言い方にする。
+      { expr: 'smile', text: '調子はいかがですか? 左のサイドバーからご用命ください。' },
       { expr: 'normal', text: '何かご用でしたら、お気軽にどうぞ。' },
     ],
     night: [
@@ -149,13 +151,23 @@ window.Views = window.Views || {};
       // 秘書子の顔の左右に置く2つの札。片方を出しても、もう片方は消えない。
       // 中身は Today に持たせてあるので、画面を移って戻ってきても残る
       // （聞き直すたびにAPI費用がかかるため）。日付が変わったら捨てられる。
+      // 閉じる（✕）は置かない。2つは左右に離れていて competing しないので、
+      // 消す理由は「背景を見たい」くらいしかない。代わりに**クリックで見出しだけの
+      // 小さい形に切り替える**。もう一度クリックすると戻る。
+      // 中身は消えないので、閉じて聞き直す（＝もう一度課金される）ことが起きない。
       function makePanel(kind, side, heading) {
         const body = App.h('p', {});
-        const panel = App.h('div', { class: `home-panel ${side}` }, [
-          App.h('button', {
-            class: 'home-panel-close', type: 'button', text: '✕', title: '閉じる',
-            onclick: () => { Today.clear(kind); paintPanel(kind); },
-          }),
+        const panel = App.h('div', {
+          class: `home-panel ${side}`,
+          title: 'クリックで大きさが変わります',
+          onclick: () => {
+            // 中の文をなぞって選んだだけのときは、切り替えない
+            const picked = window.getSelection && window.getSelection().toString();
+            if (picked) return;
+            Today.toggleCollapsed(kind);
+            paintPanel(kind);
+          },
+        }, [
           App.h('div', { class: 'home-panel-body' }, [App.h('h3', { text: heading }), body]),
         ]);
         panel.hidden = true;
@@ -172,6 +184,7 @@ window.Views = window.Views || {};
         const text = Today.get(kind);
         body.textContent = text;
         panel.hidden = !text;
+        panel.classList.toggle('is-collapsed', Today.isCollapsed(kind));
       }
 
       // 今日の予定。予定の箇条書きと、AIの進め方をひとつにまとめて出す。
@@ -184,6 +197,8 @@ window.Views = window.Views || {};
       }
 
       async function loadPlan() {
+        // 押し直したときは、小さくしてあっても開いて見せる
+        Today.setCollapsed('plan', false);
         Today.set('plan', `${listToday()}\n\n考えています…`);
         paintPanel('plan');
         // 成功でも失敗でも本文は message に入る（tasks-feature/index.js）
@@ -194,6 +209,7 @@ window.Views = window.Views || {};
       }
 
       async function loadNews() {
+        Today.setCollapsed('news', false);
         Today.set('news', '集めています…');
         paintPanel('news');
         const res = await window.hishoko.newsToday({});

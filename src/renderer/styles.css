@@ -1134,20 +1134,16 @@ body.game-view main {
   color: var(--muted);
 }
 .home-panel p { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
-.home-panel-close {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1;
-}
-.home-panel-close:hover { background: var(--line); border: none; color: var(--text); }
+
+/* クリックで見出しだけの小さい形に切り替わる（もう一度で戻る）。
+   閉じる（✕）は置かない。中身を消すと聞き直すことになり、そのたびに費用がかかる。
+   小さくするだけなら、背景を見たいときにも中身は残る。 */
+.home-panel { cursor: pointer; }
+.home-panel:hover { border-color: var(--accent); }
+.home-panel.is-collapsed { width: auto; }
+.home-panel.is-collapsed .home-panel-body { overflow: visible; }
+.home-panel.is-collapsed p { display: none; }
+.home-panel.is-collapsed h3 { margin: 0; color: var(--text); }
 
 /* 顔の左横／右横。背景の秘書子は横50.5%・頭の上11%に立っている */
 /* 淡く色を分けると、どちらの話か一目で分かる。

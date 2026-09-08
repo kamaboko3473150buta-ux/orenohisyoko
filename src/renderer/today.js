@@ -10,7 +10,15 @@ window.Today = (function () {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  const store = { date: ymd(), plan: '', news: '' };
+  // collapsed は「見出しだけの小さい形にしてある」かどうか。中身は消さない
+  // （消すと聞き直すことになり、そのたびにAPI費用がかかる）。
+  const store = {
+    date: ymd(), plan: '', news: '', collapsed: { plan: false, news: false },
+  };
+
+  function key(kind) {
+    return kind === 'news' ? 'news' : 'plan';
+  }
 
   // 日付が変わっていたら中身を捨てる。捨てたら true を返す。
   function expireIfStale(now) {
@@ -19,6 +27,7 @@ window.Today = (function () {
     store.date = today;
     store.plan = '';
     store.news = '';
+    store.collapsed = { plan: false, news: false };
     return true;
   }
 
@@ -35,8 +44,19 @@ window.Today = (function () {
       else store.plan = String(text || '');
     },
     clear(kind) {
-      if (kind === 'news') store.news = '';
-      else store.plan = '';
+      store[key(kind)] = '';
+      store.collapsed[key(kind)] = false;
+    },
+    isCollapsed(kind) {
+      expireIfStale();
+      return !!store.collapsed[key(kind)];
+    },
+    setCollapsed(kind, value) {
+      store.collapsed[key(kind)] = !!value;
+    },
+    toggleCollapsed(kind) {
+      store.collapsed[key(kind)] = !store.collapsed[key(kind)];
+      return store.collapsed[key(kind)];
     },
   };
 }());
