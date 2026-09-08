@@ -513,7 +513,7 @@ body.home-view main {
   left: 50.5%;
   /* 上端を基準にする。下端基準（bottom）だと、天気で行数が増えたときに
      上へ伸びてヘッダーの下に潜り込んだ。上から置けば何行でも収まる。 */
-  top: 8px;
+  top: 6px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -528,8 +528,9 @@ body.home-view main {
   box-shadow: 0 6px 20px rgba(22, 48, 43, .22);
   cursor: pointer;
 }
-/* 2行（天気＋あいさつ）が秘書子の頭の上に収まるよう、上下の余白は控えめにする */
-.home-bubble { padding-top: 11px; padding-bottom: 11px; }
+/* 2行（天気＋あいさつ）が秘書子の頭の上に収まるよう、上下の余白は控えめにする。
+   ここが厚いと吹き出しが下に伸びて顔にかぶる。 */
+.home-bubble { padding-top: 9px; padding-bottom: 9px; }
 .home-bubble:hover { border-color: var(--accent); }
 .home-bubble p {
   margin: 0;
@@ -537,8 +538,9 @@ body.home-view main {
      しっぽ（::after）まで巻き込まれ、しっぽが切れたうえに常に横スクロールバーが出る。 */
   max-height: 30vh;
   overflow-y: auto;
-  font-size: 14px;
-  line-height: 1.8;
+  /* 頭の上は高さが取れない。本文より一段小さくして2行に収める */
+  font-size: 13px;
+  line-height: 1.65;
   color: var(--text);
   white-space: pre-wrap;
 }

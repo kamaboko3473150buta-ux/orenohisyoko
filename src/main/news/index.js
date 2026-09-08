@@ -56,14 +56,28 @@ function fetchText(url, depth = 0) {
 }
 
 // 設定された配信をすべて取り、見出しをまとめる。
-async function collectArticles(feedList) {
-  const results = await Promise.all(feedList.map(async (f) => {
+//
+// 地域の配信は別枠で数える。日付順にそのまま混ぜると、地域の配信のほうが
+// 更新が細かいぶん上位を占めてしまい、全国のニュースが押し出される。
+async function collectArticles(feedList, region) {
+  const areaFeed = feeds.regionFeed(region);
+  const all = areaFeed ? feedList.concat([areaFeed]) : feedList;
+
+  const results = await Promise.all(all.map(async (f) => {
     const xml = await fetchText(f.url);
     return rss.parseFeed(xml, f.name);
   }));
+
+  const areaResult = areaFeed ? results[results.length - 1] : [];
+  const mainResults = areaFeed ? results.slice(0, -1) : results;
+
+  const area = rss.mergeArticles([areaResult], feeds.MAX_REGION_ARTICLES);
+  const main = rss.mergeArticles(mainResults, feeds.MAX_ARTICLES - area.length);
   return {
-    articles: rss.mergeArticles(results, feeds.MAX_ARTICLES),
-    failed: feedList.filter((f, i) => results[i].length === 0).map((f) => f.name),
+    // 地域を先に置く。重複はここで落ちる（同じ話が全国にも載っているとき）。
+    articles: rss.mergeArticles([area, main], feeds.MAX_ARTICLES),
+    regionCount: area.length,
+    failed: all.filter((f, i) => results[i].length === 0).map((f) => f.name),
   };
 }
 
@@ -73,7 +87,7 @@ function register({ getSettings, getUsage, saveUsage }) {
     const conf = settings.news || {};
     const feedList = feeds.normalizeFeeds(conf.feeds);
 
-    const { articles, failed } = await collectArticles(feedList);
+    const { articles, failed, regionCount } = await collectArticles(feedList, conf.region);
     if (articles.length === 0) {
       return {
         ok: false,
@@ -97,6 +111,7 @@ function register({ getSettings, getUsage, saveUsage }) {
       ok: true,
       message: result.body,
       articleCount: articles.length,
+      regionCount,
       failedFeeds: failed,
     };
   });

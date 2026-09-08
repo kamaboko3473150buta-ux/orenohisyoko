@@ -70,12 +70,27 @@ function parseFeed(xml, sourceName) {
 }
 
 // 複数の配信をまとめる。同じ見出しは1本にし、新しい順に並べ、上限で切る。
+// 同じ記事かどうかを見るための鍵。
+//
+// Google ニュースの見出しは「記事名 - 媒体名」の形で、同じ記事が媒体ちがいで何度も並ぶ
+// （「… - 毎日新聞」「…（毎日新聞） - Yahoo!ニュース」）。
+// 媒体の部分を落としてから比べないと、同じ話が5件のうち3件を占めてしまう。
+function dedupeKey(title) {
+  let core = String(title == null ? '' : title).trim();
+  const dash = core.lastIndexOf(' - ');
+  // 落としたあとが短すぎるときは、見出しそのものに「 - 」があっただけとみて残す
+  if (dash > 8) core = core.slice(0, dash);
+  const paren = core.replace(/（[^（）]{1,20}）\s*$/, '');
+  if (paren.length > 8) core = paren;
+  return core.replace(/\s+/g, '');
+}
+
 function mergeArticles(lists, limit) {
   const seen = new Set();
   const all = [];
   for (const list of Array.isArray(lists) ? lists : []) {
     for (const a of Array.isArray(list) ? list : []) {
-      const key = a.title.replace(/\s+/g, '');
+      const key = dedupeKey(a.title);
       if (!key || seen.has(key)) continue;
       seen.add(key);
       all.push(a);
@@ -94,5 +109,5 @@ function mergeArticles(lists, limit) {
 }
 
 module.exports = {
-  MAX_SUMMARY, decodeEntities, stripTags, parseFeed, mergeArticles, trimSummary,
+  MAX_SUMMARY, decodeEntities, stripTags, parseFeed, mergeArticles, trimSummary, dedupeKey,
 };

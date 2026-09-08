@@ -57,14 +57,18 @@ test('吹き出しの文言は1行。取れたものだけを並べる', () => {
     date: new Date(2026, 8, 8), place: '松山市', description: '曇りのち雨',
     high: 25.9, low: 24.5, rain: 100,
   });
-  assert.strictEqual(full, '2026/9/8（火） 曇りのち雨　最高26℃/最低25℃　降水100%');
+  assert.strictEqual(full, '曇りのち雨　最高26℃/最低25℃　降水100%');
   assert.ok(!full.includes('\n'), '頭の上の吹き出しは行数が増えると顔にかぶるので、必ず1行');
+  // 日付・曜日と地名は入れない。入れると折り返して2行になり、秘書子の顔にかぶる。
+  // 日付はマウスを乗せたときの説明に回す（formatDate は別に使う）。
+  assert.ok(!full.includes('2026'), '日付は吹き出しに入れない');
+  assert.ok(!full.includes('松山'), '地名は吹き出しに入れない');
 
-  const dateOnly = f.formatSummary({ date: new Date(2026, 8, 8) });
-  assert.strictEqual(dateOnly, '2026/9/8（火）', '何も取れなければ日付だけ');
+  const nothing = f.formatSummary({});
+  assert.strictEqual(nothing, '', '何も取れなければ空にする（嘘は書かない）');
 
-  const noTemp = f.formatSummary({ date: new Date(2026, 8, 8), description: '晴れ', rain: 10 });
-  assert.strictEqual(noTemp, '2026/9/8（火） 晴れ　降水10%');
+  const noTemp = f.formatSummary({ description: '晴れ', rain: 10 });
+  assert.strictEqual(noTemp, '晴れ　降水10%');
 });
 
 test('気温は四捨五入。数値でなければ出さない', () => {

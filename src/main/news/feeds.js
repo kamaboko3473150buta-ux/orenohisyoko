@@ -47,6 +47,23 @@ function normalizeRegion(value) {
   return trim(value).slice(0, 40);
 }
 
+// 地域で拾える見出しの上限。全国のニュースを押しのけないように少なめにする。
+const MAX_REGION_ARTICLES = 12;
+
+// 住んでいる地域のニュース。NHKの全国配信には県の話題がほとんど載らないため、
+// 地域を設定した人には、その地域を検索した配信をもう1本足す。
+//
+// NHKの地域ニュースにもRSSはあるが、取りに行くと 401（要トークン）で読めない（実測）。
+// Google ニュースの検索配信なら、47都道府県のどこでも同じ形で取れる。
+// **地域名は検索語としてGoogleに渡る**。設定画面にもその旨を書いておくこと。
+function regionFeed(region) {
+  const area = normalizeRegion(region);
+  if (!area) return null;
+  const url = 'https://news.google.com/rss/search'
+    + `?q=${encodeURIComponent(area)}&hl=ja&gl=JP&ceid=JP:ja`;
+  return { id: 'region', name: `地域（${area}）`, url };
+}
+
 // 記事一覧をAIに渡す本文にする。番号を振り、あとで対応を取れるようにする。
 function formatArticles(articles) {
   const list = Array.isArray(articles) ? articles : [];
@@ -67,6 +84,7 @@ function buildSystemPrompt() {
     '守ること:',
     '- 渡された見出しの範囲だけで書く。書かれていないことを足さない',
     '- 5件までに絞る。重要なもの・利用者の住む地域に関わるものを優先する',
+    '- 地名は1文字も変えない。似た名前の別の県（愛媛と愛知など）を取り違えない',
     '- 1件につき1〜2文。前置き・あいさつ・締めの言葉は書かない',
     '- 「・」で始まる箇条書きにする。番号やマークダウン記法は使わない',
     '- 事実だけを書き、論評や推測を混ぜない',
@@ -78,7 +96,8 @@ function buildUserPrompt({ articles, region, today } = {}) {
   const area = normalizeRegion(region);
   if (area) {
     lines.push(`【利用者の住む地域】${area}`);
-    lines.push(`${area}に関わる話題があれば、必ず1件は入れてください。`);
+    lines.push(`見出しの中に${area}の話題があれば、それを優先して入れてください。`);
+    lines.push(`無ければ入れなくて構いません。${area}以外の地名を${area}の話題として扱わないでください。`);
     lines.push('');
   }
   lines.push('【今日の見出し】');
@@ -94,6 +113,8 @@ module.exports = {
   isFeedUrl,
   normalizeFeeds,
   normalizeRegion,
+  regionFeed,
+  MAX_REGION_ARTICLES,
   formatArticles,
   buildSystemPrompt,
   buildUserPrompt,

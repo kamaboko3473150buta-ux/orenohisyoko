@@ -85,11 +85,14 @@ function roundTemp(v) {
 }
 
 // 吹き出しに出す1行。頭の上の吹き出しは秘書子の顔のすぐ上にしか置けないので、
-// 行数が増えると顔にかぶる。地名は本人が設定した場所なので省き、1行に収める。
+// **日付も地名も入れない**（入れると折り返して2行になり、顔にかぶる）。
+// 日付と曜日はマウスを乗せたときの説明に回す。
 function formatSummary({
-  date, description, high, low, rain,
+  description, high, low, rain,
 } = {}) {
-  const parts = [[formatDate(date), description].filter(Boolean).join(' ')];
+  const parts = [];
+  const desc = String(description == null ? '' : description).trim();
+  if (desc) parts.push(desc);
   const hi = roundTemp(high);
   const lo = roundTemp(low);
   if (hi !== null && lo !== null) parts.push(`最高${hi}℃/最低${lo}℃`);

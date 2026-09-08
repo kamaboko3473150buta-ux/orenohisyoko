@@ -7,12 +7,13 @@
 const https = require('node:https');
 const { ipcMain } = require('electron');
 const format = require('./format');
+const place = require('./place');
 
 const TIMEOUT_MS = 10000;
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 
-// その日のぶんを覚えておく入れ物。{ date, place, text }
+// その日のぶんを覚えておく入れ物。{ date, place, text, spot }
 let cache = null;
 
 function getJson(url) {
@@ -41,15 +42,25 @@ function getJson(url) {
   });
 }
 
-// 地名から緯度経度を引く。見つからなければ null。
-async function geocode(place) {
-  const name = String(place || '').trim();
-  if (!name) return null;
+async function lookupOne(name) {
   const url = `${GEOCODE_URL}?name=${encodeURIComponent(name)}&count=1&language=ja&country=JP`;
   const json = await getJson(url);
   const hit = json && Array.isArray(json.results) && json.results[0];
   if (!hit) return null;
   return { name: hit.name, latitude: hit.latitude, longitude: hit.longitude };
+}
+
+// 地名から緯度経度を引く。
+// Open-Meteo の地名検索は市区町村しか持っていないので、「愛媛県」のような
+// 都道府県名は1件も返ってこない。県庁所在地に読み替えて引き直す（place.js）。
+async function geocode(value) {
+  for (const name of place.candidates(value)) {
+    // 候補は多くて4つ。順に試し、最初に見つかったものを使う。
+    // eslint-disable-next-line no-await-in-loop
+    const spot = await lookupOne(name);
+    if (spot) return spot;
+  }
+  return null;
 }
 
 async function fetchForecast(spot) {
@@ -61,8 +72,6 @@ async function fetchForecast(spot) {
   const daily = json.daily;
   const hourly = json.hourly || {};
   return format.formatSummary({
-    date: new Date(),
-    place: spot.name,
     description: format.describeDay(hourly.weather_code, hourly.time),
     high: daily.temperature_2m_max && daily.temperature_2m_max[0],
     low: daily.temperature_2m_min && daily.temperature_2m_min[0],
@@ -77,33 +86,44 @@ function todayYmd() {
 
 function register({ getSettings }) {
   ipcMain.handle('weather:today', async (_e, { force } = {}) => {
-    const place = String(((getSettings().news || {}).region) || '').trim();
+    const where = String(((getSettings().news || {}).region) || '').trim();
     const today = todayYmd();
+    // 日付と曜日は吹き出しに入れない（2行になって顔にかぶるため）。
+    // マウスを乗せたときの説明として渡す。
+    const date = format.formatDate(new Date());
 
     // その日のぶんを取ってあれば、それを返す（1日1回だけ取りに行く）。
-    if (!force && cache && cache.date === today && cache.place === place) {
-      return { ok: true, text: cache.text, cached: true };
+    if (!force && cache && cache.date === today && cache.place === where) {
+      return {
+        ok: true, text: cache.text, date, spot: cache.spot, cached: true,
+      };
     }
 
-    if (!place) {
-      // 地名が無いと引けない。日付だけでも出す（吹き出しは常に何か言う場所なので）。
-      const text = `${format.formatDate(new Date())}\n設定で住んでいる地域を入れると、天気も出せます。`;
-      cache = { date: today, place, text };
-      return { ok: true, text, noPlace: true };
+    if (!where) {
+      const text = '設定で住んでいる地域を入れると、天気も出せます。';
+      cache = { date: today, place: where, text, spot: '' };
+      return {
+        ok: true, text, date, spot: '', noPlace: true,
+      };
     }
 
-    const spot = await geocode(place);
+    const spot = await geocode(where);
     if (!spot) {
-      const text = `${format.formatDate(new Date())}\n「${place}」の場所が分かりませんでした。`;
-      return { ok: false, text };
+      return { ok: false, text: `「${where}」の場所が分かりませんでした。`, date, spot: '' };
     }
     const text = await fetchForecast(spot);
     if (!text) {
-      return { ok: false, text: `${format.formatDate(new Date())}\n天気を取得できませんでした。` };
+      return { ok: false, text: '天気を取得できませんでした。', date, spot: spot.name };
     }
-    cache = { date: today, place, text };
-    return { ok: true, text };
+    cache = {
+      date: today, place: where, text, spot: spot.name,
+    };
+    return {
+      ok: true, text, date, spot: spot.name,
+    };
   });
 }
 
-module.exports = { register, geocode, fetchForecast, format };
+module.exports = {
+  register, geocode, fetchForecast, format, place,
+};

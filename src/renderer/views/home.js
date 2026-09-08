@@ -125,11 +125,17 @@ window.Views = window.Views || {};
 
       // 1日1回だけ取りに行く。日付が変わっていればメインプロセス側が取り直す
       // （アプリを起動していなければ、起動後に初めて見たときが取り直しの時）。
+      //
+      // 日付・曜日と、どこの天気かは吹き出しに入れない。2行になって秘書子の顔に
+      // かぶるため。マウスを乗せたときの説明に回す。
       (async () => {
         weatherLine.textContent = '天気を調べています…';
         try {
           const res = await window.hishoko.weatherToday({});
           weatherLine.textContent = res.text || '';
+          const where = res.spot ? `${res.spot}の天気` : '';
+          bubble.title = [res.date, where, 'クリックで一言が変わります']
+            .filter(Boolean).join('　');
         } catch {
           weatherLine.textContent = '';   // 取れなくても、あいさつだけは出す
         }

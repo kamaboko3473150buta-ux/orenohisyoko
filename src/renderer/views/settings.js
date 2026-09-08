@@ -169,7 +169,12 @@ Views.settings = {
       App.h('div', { class: 'field' }, [
         App.h('label', { text: '住んでいる地域（任意）' }),
         regionInput,
-        App.h('div', { class: 'status', text: 'ここに書くと、その地域の話題を優先して拾います。' }),
+        App.h('div', {
+          class: 'status',
+          text: 'ここに書くと、その地域のニュースを集め（Google ニュースの検索配信）、'
+            + 'トップページの天気もこの場所のものになります。'
+            + '都道府県名を書いた場合は、県庁所在地の天気を出します。',
+        }),
       ]),
       App.h('div', { class: 'field' }, [App.h('label', { text: '見に行く配信（任意）' }), feedsInput]),
       App.h('div', { class: 'actions' }, [saveNewsBtn]),

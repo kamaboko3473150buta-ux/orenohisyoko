@@ -97,7 +97,11 @@ test('AIに渡す本文には、地域を優先する指示が入る', () => {
   const articles = rss.parseFeed(SAMPLE_RSS, 'NHK');
   const withArea = feeds.buildUserPrompt({ articles, region: '愛媛', today: '2026-09-08' });
   assert.ok(withArea.includes('愛媛'));
-  assert.ok(withArea.includes('必ず1件は入れて'));
+  assert.ok(withArea.includes('優先して入れて'));
+  // 「必ず1件は入れて」と書くと、県の話題が無い日に似た名前の別の県
+  // （愛媛のつもりで愛知）を拾ってくる。無ければ入れなくてよいと伝える。
+  assert.ok(!withArea.includes('必ず1件'));
+  assert.ok(withArea.includes('無ければ入れなくて構いません'));
 
   const noArea = feeds.buildUserPrompt({ articles, today: '2026-09-08' });
   assert.ok(!noArea.includes('利用者の住む地域'));
@@ -114,4 +118,45 @@ test('AIに渡すのは見出しと短い要約だけ（記事本文は渡さな
   const text = feeds.buildUserPrompt({ articles, today: '2026-09-08' });
   // 見出し40件でも数千トークンに収まる大きさであること
   assert.ok(text.length < 4000, `渡す量が多すぎる: ${text.length}字`);
+});
+
+test('地域を設定すると、その地域の配信を1本足す', () => {
+  const f = feeds.regionFeed('愛媛県');
+  assert.ok(f.url.startsWith('https://news.google.com/rss/search'));
+  assert.ok(f.url.includes(encodeURIComponent('愛媛県')), '地域名が検索語に入る');
+  assert.ok(f.name.includes('愛媛県'), 'どこの配信か画面で分かる名前にする');
+
+  // NHKの全国配信には県の話題がほとんど載らない。地域を入れていない人には足さない。
+  assert.strictEqual(feeds.regionFeed(''), null);
+  assert.strictEqual(feeds.regionFeed(null), null);
+  assert.strictEqual(feeds.regionFeed('   '), null);
+});
+
+test('地域の見出しは全国のニュースを押しのけない件数に抑える', () => {
+  assert.ok(feeds.MAX_REGION_ARTICLES > 0);
+  assert.ok(feeds.MAX_REGION_ARTICLES < feeds.MAX_ARTICLES / 2);
+});
+
+test('同じ記事が媒体ちがいで並んでも1件にまとめる', () => {
+  // Google ニュースの見出しは「記事名 - 媒体名」。Yahoo!の転載も混ざる。
+  const title = '愛媛県内で初記録 淡水魚「ムギツク」を仁淀川水系で捕獲';
+  assert.strictEqual(
+    rss.dedupeKey(`${title} - 毎日新聞`),
+    rss.dedupeKey(`${title}（毎日新聞） - Yahoo!ニュース`),
+  );
+
+  const merged = rss.mergeArticles([[
+    { title: `${title} - 毎日新聞`, source: 'A', publishedAt: '' },
+    { title: `${title}（毎日新聞） - Yahoo!ニュース`, source: 'B', publishedAt: '' },
+  ]], 10);
+  assert.strictEqual(merged.length, 1, '同じ話が5件のうち3件を占めてしまう');
+});
+
+test('別の記事は別のものとして残す', () => {
+  assert.notStrictEqual(
+    rss.dedupeKey('松山市で大雨 - 愛媛新聞'),
+    rss.dedupeKey('今治市で大雨 - 愛媛新聞'),
+  );
+  // 短い見出しの中の「 - 」まで媒体名と見なさない
+  assert.strictEqual(rss.dedupeKey('A - B'), 'A-B');
 });
