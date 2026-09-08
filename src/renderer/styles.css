@@ -511,12 +511,16 @@ body.home-view main {
 .home-bubble {
   position: absolute;
   left: 50.5%;
-  bottom: 90%;
+  /* 上端を基準にする。下端基準（bottom）だと、天気で行数が増えたときに
+     上へ伸びてヘッダーの下に潜り込んだ。上から置けば何行でも収まる。 */
+  top: 8px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 12px;
-  max-width: min(420px, 80vw);
+  /* 天気の1行（日付・曜日・天気・気温・降水）が折り返さない幅。
+     ここが狭いと2行になり、そのぶん吹き出しが下に伸びて顔にかぶる。 */
+  max-width: min(520px, 84vw);
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: 16px;
@@ -524,9 +528,15 @@ body.home-view main {
   box-shadow: 0 6px 20px rgba(22, 48, 43, .22);
   cursor: pointer;
 }
+/* 2行（天気＋あいさつ）が秘書子の頭の上に収まるよう、上下の余白は控えめにする */
+.home-bubble { padding-top: 11px; padding-bottom: 11px; }
 .home-bubble:hover { border-color: var(--accent); }
 .home-bubble p {
   margin: 0;
+  /* あふれたときに縦スクロールするのは本文だけ。吹き出し側で overflow を持つと
+     しっぽ（::after）まで巻き込まれ、しっぽが切れたうえに常に横スクロールバーが出る。 */
+  max-height: 30vh;
+  overflow-y: auto;
   font-size: 14px;
   line-height: 1.8;
   color: var(--text);
@@ -1089,12 +1099,34 @@ body.game-view main {
   position: absolute;
   width: 260px;
   max-height: 58%;
-  overflow-y: auto;
   padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, .96);
   border: 1px solid var(--line-strong);
   box-shadow: 0 6px 20px rgba(22, 48, 43, .26);
+}
+/* 中身だけを巻き取る。突起は札の外に出るので、札自体は overflow を切らない
+   （切ると突起も一緒に消えてしまう）。 */
+.home-panel-body { max-height: 100%; overflow-y: auto; }
+
+/* 秘書子のほうを指す突起。どちらが話しているのかを見て分かるようにする。 */
+.home-panel::after {
+  content: "";
+  position: absolute;
+  top: 26px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+.home-panel.left::after {
+  right: -8px;
+  border-left: none;
+  border-bottom: none;
+}
+.home-panel.right::after {
+  left: -8px;
+  border-right: none;
+  border-top: none;
 }
 .home-panel[hidden] { display: none; }
 .home-panel h3 {
@@ -1120,5 +1152,30 @@ body.game-view main {
 .home-panel-close:hover { background: var(--line); border: none; color: var(--text); }
 
 /* 顔の左横／右横。背景の秘書子は横50.5%・頭の上11%に立っている */
-.home-panel.left { right: 62%; top: 12%; }
-.home-panel.right { left: 62%; top: 12%; }
+/* 淡く色を分けると、どちらの話か一目で分かる。
+   予定はアプリの基調色（緑）、ニュースは青系。文字が読める濃さに留める。 */
+.home-panel.left {
+  right: 62%;
+  top: 12%;
+  background: #f2f8f5;
+}
+.home-panel.left::after { background: #f2f8f5; }
+.home-panel.right {
+  left: 62%;
+  top: 12%;
+  background: #f1f5fa;
+}
+.home-panel.right::after { background: #f1f5fa; }
+
+/* 頭の上の吹き出し。1行目が今日の天気、2行目があいさつ。 */
+.home-weather {
+  display: block;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.home-greet {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}

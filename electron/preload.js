@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('hishoko', {
 
   docPickImages: () => ipcRenderer.invoke('doc:pickImages'),
 
+  // 今日の天気（AIは使わない）
+  weatherToday: (args) => ipcRenderer.invoke('weather:today', args),
+
   // 今日のニュース（RSSを直接取り、見出しだけAIに渡す）
   newsToday: (args) => ipcRenderer.invoke('news:today', args),
 

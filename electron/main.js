@@ -16,6 +16,7 @@ const docgen = require('../src/main/docgen');
 const translate = require('../src/main/translate');
 const mailcheck = require('../src/main/mailcheck');
 const news = require('../src/main/news');
+const weather = require('../src/main/weather');
 
 // 保存先を明示的に固定する（productNameが日本語でもフォルダ名を英字に保つため）
 app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
@@ -223,6 +224,7 @@ app.whenReady().then(() => {
   docgen.register({ getSettings, getUsage, saveUsage, getDocDrafts, saveDocDrafts });
   translate.register({ getSettings, getUsage, saveUsage });
   news.register({ getSettings, getUsage, saveUsage });
+  weather.register({ getSettings });
   createWindow();
 
   app.on('activate', () => {

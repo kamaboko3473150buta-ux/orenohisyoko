@@ -44,22 +44,17 @@ window.Views = window.Views || {};
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  // 締切がある日はそれを優先して伝える。無ければ時間帯のセリフ候補を返す。
+  // 頭の上の吹き出しの2行目。時間帯のあいさつだけにする。
+  //
+  // 以前はここに締切の件数を出していたが、「今日の予定」と内容がかぶって
+  // 意味をなさなくなったのでやめた。締切はそちらで、件数ではなく中身まで見られる。
+  // 期限切れがあるときだけ、一言だけ添える（件数は言わない）。
   function linePool(dueSoon, now) {
     const overdue = (dueSoon && dueSoon.overdue) || 0;
-    const todayCount = (dueSoon && dueSoon.today) || 0;
     if (overdue > 0) {
       return [
-        { expr: 'hurry', text: `期限切れが${overdue}件あります。今日中の締切は${todayCount}件です。` },
-        { expr: 'hurry', text: `${overdue}件、期限を過ぎています。先に片付けましょう。` },
-        { expr: 'trouble', text: `期限切れが${overdue}件…早めに確認しておきましょう。` },
-      ];
-    }
-    if (todayCount > 0) {
-      return [
-        { expr: 'normal', text: `今日締切のタスクが${todayCount}件あります。` },
-        { expr: 'normal', text: `今日中に${todayCount}件、片付けるものがありますね。` },
-        { expr: 'smile', text: `今日が締切のものが${todayCount}件。順番に進めましょう。` },
+        { expr: 'hurry', text: '期限を過ぎているものがあります。' },
+        { expr: 'trouble', text: '期限切れのものが残っています。' },
       ];
     }
     return TIME_GREETINGS[timeSlot(now)];
@@ -82,11 +77,15 @@ window.Views = window.Views || {};
       App.setTitle('俺の秘書子');
 
       let dueSoon = null;
-      let tasks = [];
+      let todayTasks = [];
       try {
         const result = await window.hishoko.taskList();
         dueSoon = result && result.dueSoon;
-        tasks = (result && result.tasks) || [];
+        // task:list が返すのは { groups, dueSoon }。tasks という名前では返ってこない
+        // （ここを tasks と書いていたため、予定があるのに「ありません」と出ていた）。
+        // 今日ぶんは groups.today に、期限切れは groups.overdue に入っている。
+        const groups = (result && result.groups) || {};
+        todayTasks = (groups.overdue || []).concat(groups.today || []);
       } catch {
         // 締切が取れなくても、トップページの表示自体は続ける（時間帯のセリフにする）。
         dueSoon = null;
@@ -110,11 +109,31 @@ window.Views = window.Views || {};
       // 小さな顔をもう一つ添えると二重になる。表情はセリフの選び方で伝える。
       bubble.appendChild(bubbleText);
 
+      // 頭の上の吹き出しは常に出ているので、閉じられない情報＝今日の天気を置く。
+      // 締切の件数はここに出していたが、「今日の予定」と内容がかぶるのでやめた。
+      // 天気にAIは使わない（値をそのまま日本語にするだけ）ので費用はかからない。
+      const weatherLine = App.h('span', { class: 'home-weather' });
+      const greetLine = App.h('span', { class: 'home-greet' });
+      bubbleText.appendChild(weatherLine);
+      bubbleText.appendChild(greetLine);
+
       let current = null;
       function applyLine(line) {
         current = line;
-        bubbleText.textContent = line.text;
+        greetLine.textContent = line.text;
       }
+
+      // 1日1回だけ取りに行く。日付が変わっていればメインプロセス側が取り直す
+      // （アプリを起動していなければ、起動後に初めて見たときが取り直しの時）。
+      (async () => {
+        weatherLine.textContent = '天気を調べています…';
+        try {
+          const res = await window.hishoko.weatherToday({});
+          weatherLine.textContent = res.text || '';
+        } catch {
+          weatherLine.textContent = '';   // 取れなくても、あいさつだけは出す
+        }
+      })();
 
       bubble.addEventListener('click', () => {
         const pool = linePool(dueSoon, new Date());
@@ -131,8 +150,7 @@ window.Views = window.Views || {};
             class: 'home-panel-close', type: 'button', text: '✕', title: '閉じる',
             onclick: () => { Today.clear(kind); paintPanel(kind); },
           }),
-          App.h('h3', { text: heading }),
-          body,
+          App.h('div', { class: 'home-panel-body' }, [App.h('h3', { text: heading }), body]),
         ]);
         panel.hidden = true;
         return { panel, body };
@@ -153,11 +171,10 @@ window.Views = window.Views || {};
       // 今日の予定。予定の箇条書きと、AIの進め方をひとつにまとめて出す。
       // 箇条書きはアプリの中で数えるだけ（無料）で、AIに渡すのは進め方の相談だけ。
       function listToday() {
-        const ymd = Today.ymd();
-        const todays = tasks.filter((t) => t && !t.done && (t.end === ymd || t.start === ymd
-          || (t.start && t.end && t.start <= ymd && ymd <= t.end)));
-        if (todays.length === 0) return '今日の予定はありません。';
-        return todays.map((t) => (t.at ? `・${t.at} ${t.title}` : `・${t.title}`)).join('\n');
+        if (todayTasks.length === 0) return '今日の予定はありません。';
+        return todayTasks
+          .map((t) => (t.at ? `・${t.at} ${t.title}` : `・${t.title}`))
+          .join('\n');
       }
 
       async function loadPlan() {
