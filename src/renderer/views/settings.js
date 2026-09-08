@@ -140,6 +140,41 @@ Views.settings = {
       App.toast('文面履歴を消去しました');
     });
 
+    // 今日のニュース。住んでいる地域と、見に行く配信の一覧。
+    // 記事本文は取りに行かず見出しだけをAIに渡すので、1回あたり1〜3円で済む。
+    const newsConf = s.news || { region: '', feeds: [] };
+    const regionInput = App.h('input', { type: 'text', placeholder: '例: 愛媛県 / 松山市' });
+    regionInput.value = newsConf.region || '';
+
+    const feedsInput = App.h('textarea', { placeholder: '1行に1つ、RSSのURL。空にすると既定（NHK 主要・社会・経済）を使います' });
+    feedsInput.value = (newsConf.feeds || []).map((f) => f.url).join('\n');
+
+    const saveNewsBtn = App.h('button', { text: '保存' });
+    saveNewsBtn.addEventListener('click', async () => {
+      const urls = feedsInput.value.split('\n').map((t) => t.trim()).filter(Boolean);
+      await window.hishoko.saveSettings({
+        news: { region: regionInput.value.trim(), feeds: urls.map((url) => ({ url })) },
+      });
+      App.toast('ニュースの設定を保存しました');
+    });
+
+    root.appendChild(App.h('div', { class: 'card' }, [
+      App.h('div', { class: 'field' }, [
+        App.h('label', { text: '今日のニュース' }),
+        App.h('div', {
+          class: 'status',
+          text: 'トップページの「今日のニュース」で使います。見出しだけをAIに渡すので、1回あたり1〜3円です。',
+        }),
+      ]),
+      App.h('div', { class: 'field' }, [
+        App.h('label', { text: '住んでいる地域（任意）' }),
+        regionInput,
+        App.h('div', { class: 'status', text: 'ここに書くと、その地域の話題を優先して拾います。' }),
+      ]),
+      App.h('div', { class: 'field' }, [App.h('label', { text: '見に行く配信（任意）' }), feedsInput]),
+      App.h('div', { class: 'actions' }, [saveNewsBtn]),
+    ]));
+
     // 保存データの場所。控えを取りたいとき、フォルダごとコピーできるようにする。
     const openDirBtn = App.h('button', { class: 'secondary', text: '保存フォルダを開く' });
     openDirBtn.addEventListener('click', () => window.hishoko.openDataDir());

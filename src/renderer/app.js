@@ -76,6 +76,13 @@ const App = {
     document.body.classList.toggle('game-view', viewName.startsWith('game'));
     // 秘書子が出ない画面では、右に空けておいた居場所も要らない
     document.body.classList.toggle('no-hishoko', NO_HISHOKO.includes(viewName));
+
+    // 「今日の…」はトップページのものなので、そこ以外ではボタンを出さない。
+    // 画面を移るたびに日付を見て、日をまたいでいたら中身を捨てる
+    // （アプリを開きっぱなしで翌日になることがあるため）。
+    if (window.Today) Today.expireIfStale();
+    const todayBar = document.getElementById('todayBar');
+    if (todayBar) todayBar.hidden = viewName !== 'home';
     this.paintSidebar(viewName);
 
     // 画面を移ったら秘書子はいったん既定（微笑・吹き出しなし）に戻す。

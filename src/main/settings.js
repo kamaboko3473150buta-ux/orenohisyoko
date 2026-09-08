@@ -5,6 +5,7 @@
 const { readJson, writeJson } = require('./jsonfile');
 const { FEATURES, findModel } = require('./models');
 const { normalizeWatchList, normalizeMatch, normalizeDays, DEFAULT_DAYS } = require('./mailcheck/query');
+const { normalizeFeeds, normalizeRegion } = require('./news/feeds');
 
 // 機能ごとの既定モデル（FEATURESのdefaultModelそのまま）。
 // 例: { mail: 'claude-opus-5', task: 'claude-opus-5', docgen: 'claude-sonnet-5' }
@@ -25,7 +26,14 @@ const DEFAULT_SETTINGS = {
     unreadOnly: true,
     days: DEFAULT_DAYS,
   },
+  // 今日のニュース。住んでいる地域と、見に行く配信の一覧。
+  news: { region: '', feeds: [] },
 };
+
+function normalizeNews(raw) {
+  const r = (raw && typeof raw === 'object') ? raw : {};
+  return { region: normalizeRegion(r.region), feeds: normalizeFeeds(r.feeds) };
+}
 
 // 保存されている受信確認の設定を、そのまま信用せず形にはめ直す。
 function normalizeMailcheck(raw) {
@@ -67,6 +75,7 @@ function loadSettings(filePath, crypto) {
     defaultTaskInput: raw.defaultTaskInput === 'ai' ? 'ai' : DEFAULT_SETTINGS.defaultTaskInput,
     models: normalizeModels(raw.models),
     mailcheck: normalizeMailcheck(raw.mailcheck),
+    news: normalizeNews(raw.news),
     apiKey: '',
     encrypted: false,
     mailAppPassword: '',
@@ -129,6 +138,10 @@ function saveSettings(filePath, patch, crypto) {
   }
 
   // 受信確認の設定は入れ子。片方だけ渡しても他が消えないようマージする。
+  if (Object.prototype.hasOwnProperty.call(patch, 'news')) {
+    next.news = normalizeNews({ ...(raw.news || {}), ...(patch.news || {}) });
+  }
+
   if (Object.prototype.hasOwnProperty.call(patch, 'mailcheck')) {
     next.mailcheck = normalizeMailcheck({ ...(raw.mailcheck || {}), ...(patch.mailcheck || {}) });
   }

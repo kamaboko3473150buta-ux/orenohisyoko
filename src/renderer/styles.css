@@ -1078,14 +1078,47 @@ body.game-view main {
 .doc-image-row input { flex: 1 1 auto; }
 .doc-image-row button { flex: 0 0 auto; }
 
-/* トップページから今日のことを聞くボタン。吹き出しのすぐ下に置く */
-.home-actions {
+/* 上部バーの「今日の…」ボタン。絵の中に置くと邪魔になるのでヘッダーに並べる */
+.today-bar { display: flex; gap: 8px; margin-left: 10px; }
+.today-bar[hidden] { display: none; }
+.today-bar button { flex: 0 0 auto; }
+
+/* トップページの2つの吹き出し。秘書子の顔の左右に置き、
+   片方を出しても、もう片方は消えない。 */
+.home-panel {
   position: absolute;
-  left: 50.5%;
-  bottom: calc(90% - 46px);
-  transform: translateX(-50%);
-  display: flex;
-  gap: 10px;
-  white-space: nowrap;
+  width: 260px;
+  max-height: 58%;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 6px 20px rgba(22, 48, 43, .26);
 }
-.home-actions button { flex: 0 0 auto; }
+.home-panel[hidden] { display: none; }
+.home-panel h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+.home-panel p { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.home-panel-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
+.home-panel-close:hover { background: var(--line); border: none; color: var(--text); }
+
+/* 顔の左横／右横。背景の秘書子は横50.5%・頭の上11%に立っている */
+.home-panel.left { right: 62%; top: 12%; }
+.home-panel.right { left: 62%; top: 12%; }

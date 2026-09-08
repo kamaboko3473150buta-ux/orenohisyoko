@@ -15,6 +15,7 @@ const tasksFeature = require('../src/main/tasks-feature');
 const docgen = require('../src/main/docgen');
 const translate = require('../src/main/translate');
 const mailcheck = require('../src/main/mailcheck');
+const news = require('../src/main/news');
 
 // 保存先を明示的に固定する（productNameが日本語でもフォルダ名を英字に保つため）
 app.setPath('userData', path.join(app.getPath('appData'), APP_DIR_NAME));
@@ -107,6 +108,7 @@ function registerCommonHandlers() {
       // 受信確認の設定。アプリパスワードそのものは、APIキーと同じく画面に渡さない。
       mailcheck: s.mailcheck,
       hasMailPassword: Boolean(s.mailAppPassword),
+      news: s.news,
     };
   });
 
@@ -220,6 +222,7 @@ app.whenReady().then(() => {
   tasksFeature.register({ getSettings, getTasks, saveTasks, getUsage, saveUsage });
   docgen.register({ getSettings, getUsage, saveUsage, getDocDrafts, saveDocDrafts });
   translate.register({ getSettings, getUsage, saveUsage });
+  news.register({ getSettings, getUsage, saveUsage });
   createWindow();
 
   app.on('activate', () => {

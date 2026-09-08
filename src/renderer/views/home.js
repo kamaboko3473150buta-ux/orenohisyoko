@@ -121,47 +121,83 @@ window.Views = window.Views || {};
         applyLine(pickLine(pool, current && current.text));
       });
 
-      // トップページから、その場で今日のことを聞けるようにする。
-      // 予定の確認はアプリの中だけで済ませ（AIを使わない＝費用がかからない）、
-      // 相談だけAIに渡す。ここを分けないと、見るだけのつもりで課金される。
-      const actions = App.h('div', { class: 'home-actions' });
+      // 秘書子の顔の左右に置く2つの札。片方を出しても、もう片方は消えない。
+      // 中身は Today に持たせてあるので、画面を移って戻ってきても残る
+      // （聞き直すたびにAPI費用がかかるため）。日付が変わったら捨てられる。
+      function makePanel(kind, side, heading) {
+        const body = App.h('p', {});
+        const panel = App.h('div', { class: `home-panel ${side}` }, [
+          App.h('button', {
+            class: 'home-panel-close', type: 'button', text: '✕', title: '閉じる',
+            onclick: () => { Today.clear(kind); paintPanel(kind); },
+          }),
+          App.h('h3', { text: heading }),
+          body,
+        ]);
+        panel.hidden = true;
+        return { panel, body };
+      }
 
-      function todayText() {
-        const now = new Date();
-        const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const panels = {
+        plan: makePanel('plan', 'left', '今日の予定'),
+        news: makePanel('news', 'right', '今日のニュース'),
+      };
+
+      function paintPanel(kind) {
+        const { panel, body } = panels[kind];
+        const text = Today.get(kind);
+        body.textContent = text;
+        panel.hidden = !text;
+      }
+
+      // 今日の予定。予定の箇条書きと、AIの進め方をひとつにまとめて出す。
+      // 箇条書きはアプリの中で数えるだけ（無料）で、AIに渡すのは進め方の相談だけ。
+      function listToday() {
+        const ymd = Today.ymd();
         const todays = tasks.filter((t) => t && !t.done && (t.end === ymd || t.start === ymd
           || (t.start && t.end && t.start <= ymd && ymd <= t.end)));
         if (todays.length === 0) return '今日の予定はありません。';
-        return todays
-          .map((t) => (t.at ? `${t.at} ${t.title}` : `・${t.title}`))
-          .join('\n');
+        return todays.map((t) => (t.at ? `・${t.at} ${t.title}` : `・${t.title}`)).join('\n');
       }
 
-      actions.appendChild(App.h('button', {
-        class: 'secondary',
-        text: '今日の予定',
-        onclick: () => { bubbleText.textContent = todayText(); current = null; },
-      }));
+      async function loadPlan() {
+        Today.set('plan', `${listToday()}\n\n考えています…`);
+        paintPanel('plan');
+        // 成功でも失敗でも本文は message に入る（tasks-feature/index.js）
+        const res = await window.hishoko.taskBrief({});
+        const advice = res.message || 'うまく答えられませんでした。';
+        Today.set('plan', `${listToday()}\n\n${advice}`);
+        paintPanel('plan');
+      }
 
-      const briefBtn = App.h('button', { text: '今日の進め方を相談する' });
-      briefBtn.addEventListener('click', async () => {
-        briefBtn.disabled = true;
-        bubbleText.textContent = '考えています…';
-        try {
-          // 成功でも失敗でも本文は message に入る（tasks-feature/index.js）
-          const res = await window.hishoko.taskBrief({});
-          bubbleText.textContent = res.message || 'うまく答えられませんでした。';
-          current = null;
-        } finally {
-          briefBtn.disabled = false;
-        }
-      });
-      actions.appendChild(briefBtn);
+      async function loadNews() {
+        Today.set('news', '集めています…');
+        paintPanel('news');
+        const res = await window.hishoko.newsToday({});
+        Today.set('news', res.message || 'ニュースを取得できませんでした。');
+        paintPanel('news');
+      }
+
+      // ボタンは絵の中ではなく上部バーに置く（絵の上だと邪魔になる）。
+      // 画面ごとに作り直されるので、押したときの動きだけを毎回つなぎ直す。
+      function wire(id, run) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.onclick = async () => {
+          btn.disabled = true;
+          try { await run(); } finally { btn.disabled = false; }
+        };
+      }
+      wire('todayPlanBtn', loadPlan);
+      wire('todayNewsBtn', loadNews);
 
       scene.appendChild(bubble);
-      scene.appendChild(actions);
+      scene.appendChild(panels.plan.panel);
+      scene.appendChild(panels.news.panel);
       root.appendChild(scene);
 
+      paintPanel('plan');
+      paintPanel('news');
       applyLine(pickLine(linePool(dueSoon, new Date()), null));
     },
   };
