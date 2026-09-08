@@ -544,19 +544,9 @@ body.home-view main {
   color: var(--text);
   white-space: pre-wrap;
 }
-.home-bubble::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -9px;
-  width: 16px;
-  height: 16px;
-  margin-left: -8px;
-  background: var(--panel);
-  border-right: 1px solid var(--line-strong);
-  border-bottom: 1px solid var(--line-strong);
-  transform: rotate(45deg);
-}
+/* 頭の上の吹き出しには突起を付けない。ここは秘書子の頭のすぐ上にしか置けず、
+   突起を出すと頭に重なる。真上にあること自体が話者を示している。
+   左右の札（.home-panel）は横に離れているので、そちらには突起を付ける。 */
 
 /* 吹き出しの中に置く小さな表情。背景の秘書子の顔に重ねると顔が隠れるので、
    話し手の目印として吹き出し側に添える。 */
@@ -1099,6 +1089,10 @@ body.game-view main {
    片方を出しても、もう片方は消えない。 */
 .home-panel {
   position: absolute;
+  /* 縦に伸びる本文を .home-panel-body に巻き取らせるため、札は縦並びの箱にする。
+     こうしないと本文の高さが決まらず、max-height を超えて外へはみ出す。 */
+  display: flex;
+  flex-direction: column;
   width: 260px;
   max-height: 58%;
   padding: 12px 14px;
@@ -1108,7 +1102,9 @@ body.game-view main {
 }
 /* 中身だけを巻き取る。突起は札の外に出るので、札自体は overflow を切らない
    （切ると突起も一緒に消えてしまう）。 */
-.home-panel-body { max-height: 100%; overflow-y: auto; }
+/* max-height を % で指定しても、親（札）の高さが auto のときは効かない。
+     縦並びの箱の中で min-height:0 にして、余った分だけ縮ませる。 */
+.home-panel-body { min-height: 0; overflow-y: auto; }
 
 /* 秘書子のほうを指す突起。どちらが話しているのかを見て分かるようにする。 */
 .home-panel::after {
@@ -1158,13 +1154,14 @@ body.game-view main {
    予定はアプリの基調色（緑）、ニュースは青系。文字が読める濃さに留める。 */
 .home-panel.left {
   right: 62%;
-  top: 12%;
+  /* 頭の上の吹き出しに上端が密着しないよう、少し下げる */
+  top: 15%;
   background: #f2f8f5;
 }
 .home-panel.left::after { background: #f2f8f5; }
 .home-panel.right {
   left: 62%;
-  top: 12%;
+  top: 15%;
   background: #f1f5fa;
 }
 .home-panel.right::after { background: #f1f5fa; }

@@ -66,23 +66,39 @@ for (const full of Object.keys(PREFECTURE_CITY)) {
 
 const MAX_CANDIDATES = 4;
 
-// 入れてもらった地名から、順に試す名前を作る。前のものほど本人の書いた形に近い。
-function candidates(value) {
-  const name = String(value == null ? '' : value).trim();
-  if (!name) return [];
+// 「愛媛県/今治市」「愛媛県 今治市」のように区切って書く人もいる。
+// 区切りで分けて、それぞれを地名として扱う。
+function parts(value) {
+  return String(value == null ? '' : value)
+    .split(/[\s/／、，,・|｜]+/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
 
-  const out = [name];
+// 入れてもらった地名から、順に試す名前を作る。
+//
+// 区切って書かれているときは**後ろに書かれたものから**試す。
+// 「愛媛県/今治市」なら今治市の天気を出したいはずで、県より市のほうが本人に近い。
+function candidates(value) {
+  const list = parts(value);
+  if (!list.length) return [];
+
+  const out = [];
   const push = (v) => {
     if (v && !out.includes(v) && out.length < MAX_CANDIDATES) out.push(v);
   };
 
-  // 都道府県そのもの（「愛媛県」→「松山市」）
-  push(PREFECTURE_CITY[name]);
-  // 県を省いた書き方（「愛媛」→「松山市」）
-  push(PREFECTURE_CITY[SHORT_TO_FULL[name]]);
-  // 「松山市」で見つからないときのために、末尾の市区町村も落としてみる
-  const bare = name.replace(/[都道府県市区町村]$/, '');
-  push(bare !== name ? bare : '');
+  const ordered = list.length > 1 ? list.slice().reverse() : list;
+  for (const name of ordered) {
+    push(name);                                   // 書かれたそのまま
+    push(PREFECTURE_CITY[name]);                  // 「愛媛県」→「松山市」
+    push(PREFECTURE_CITY[SHORT_TO_FULL[name]]);   // 「愛媛」→「松山市」
+  }
+  // ここまで全部だめだったとき用に、末尾の都道府県市区町村を落としてみる
+  for (const name of ordered) {
+    const bare = name.replace(/[都道府県市区町村]$/, '');
+    if (bare !== name) push(bare);
+  }
 
   return out;
 }
@@ -94,5 +110,5 @@ function representativeCity(value) {
 }
 
 module.exports = {
-  PREFECTURE_CITY, SHORT_TO_FULL, MAX_CANDIDATES, candidates, representativeCity,
+  PREFECTURE_CITY, SHORT_TO_FULL, MAX_CANDIDATES, parts, candidates, representativeCity,
 };

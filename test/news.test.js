@@ -160,3 +160,9 @@ test('別の記事は別のものとして残す', () => {
   // 短い見出しの中の「 - 」まで媒体名と見なさない
   assert.strictEqual(rss.dedupeKey('A - B'), 'A-B');
 });
+
+test('区切って書かれた地域は、区切りを空白に直して検索語にする', () => {
+  const f = feeds.regionFeed('愛媛県/今治市');
+  assert.ok(f.url.includes(encodeURIComponent('愛媛県 今治市')));
+  assert.ok(f.name.includes('愛媛県/今治市'), '画面には本人の書いた形を出す');
+});

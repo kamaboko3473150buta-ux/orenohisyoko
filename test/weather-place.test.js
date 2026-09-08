@@ -53,3 +53,19 @@ test('同じ名前を二度試さない', () => {
   const c = place.candidates('東京都');
   assert.strictEqual(new Set(c).size, c.length);
 });
+
+test('区切って書かれたときは、後ろの細かい地名から試す', () => {
+  // 「愛媛県/今治市」なら今治市の天気を出したいはず。県より市のほうが本人に近い。
+  assert.strictEqual(place.candidates('愛媛県/今治市')[0], '今治市');
+  assert.strictEqual(place.candidates('愛媛県 今治市')[0], '今治市');
+  assert.strictEqual(place.candidates('愛媛県、今治市')[0], '今治市');
+  assert.strictEqual(place.candidates('大阪府 堺市')[0], '堺市');
+
+  // それでも駄目だったとき用に、県のぶんも候補に残す
+  assert.ok(place.candidates('愛媛県/今治市').includes('松山市'));
+});
+
+test('区切りだけの入力では候補を作らない', () => {
+  assert.deepStrictEqual(place.candidates('/ 、'), []);
+  assert.deepStrictEqual(place.parts('愛媛県/今治市'), ['愛媛県', '今治市']);
+});

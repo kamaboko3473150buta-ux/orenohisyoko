@@ -59,8 +59,11 @@ const MAX_REGION_ARTICLES = 12;
 function regionFeed(region) {
   const area = normalizeRegion(region);
   if (!area) return null;
+  // 「愛媛県/今治市」のように区切って書かれていたら、区切りは空白に直して渡す。
+  // 検索語としてはそのままで通る（実測で「"愛媛県" OR "今治市"」と同じ結果）。
+  const query = area.replace(/[\s/／、，,・|｜]+/g, ' ').trim();
   const url = 'https://news.google.com/rss/search'
-    + `?q=${encodeURIComponent(area)}&hl=ja&gl=JP&ceid=JP:ja`;
+    + `?q=${encodeURIComponent(query)}&hl=ja&gl=JP&ceid=JP:ja`;
   return { id: 'region', name: `地域（${area}）`, url };
 }
 
