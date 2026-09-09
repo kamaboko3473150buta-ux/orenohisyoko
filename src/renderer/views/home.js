@@ -200,10 +200,38 @@ window.Views = window.Views || {};
         body.appendChild(document.createTextNode(text.slice(end)));
       }
 
+      // ニュースは行ごとに配信元へのリンクにする。
+      //
+      // AIが各行の先頭に付けた番号（[3]）で元の見出しを引く。見出しの文字列で
+      // 照合すると、AIが言い換えた瞬間に外れる（要約なので必ず言い換える）。
+      // 番号が無い行・リンクが取れない行は、ただの文字として出す。
+      function paintNewsBody(body, text) {
+        body.textContent = '';
+        const articles = Today.getNewsArticles();
+        NewsLines.parseLines(text).forEach((line, i) => {
+          if (i > 0) body.appendChild(document.createTextNode('\n'));
+          const url = NewsLines.linkFor(articles, line.n);
+          if (!url) { body.appendChild(document.createTextNode(line.text)); return; }
+          body.appendChild(App.h('a', {
+            class: 'news-link',
+            href: '#',
+            title: `配信元を開く: ${url}`,
+            text: line.text,
+            onclick: (e) => {
+              e.preventDefault();
+              // 札のクリック（大きさの切り替え）まで動いてしまわないように止める
+              e.stopPropagation();
+              window.hishoko.newsOpen(url);
+            },
+          }));
+        });
+      }
+
       function paintPanel(kind) {
         const { panel, body } = panels[kind];
         const text = Today.get(kind);
         if (kind === 'plan') paintPlanBody(body, text);
+        else if (kind === 'news') paintNewsBody(body, text);
         else body.textContent = text;
         panel.hidden = !text;
         panel.classList.toggle('is-collapsed', Today.isCollapsed(kind));
@@ -245,6 +273,8 @@ window.Views = window.Views || {};
         Today.set('news', '集めています…');
         paintPanel('news');
         const res = await window.hishoko.newsToday({});
+        // 見出しの一覧は本文と一緒に持たせる。行の番号から配信元を開くのに使う。
+        Today.setNewsArticles(res.articles);
         Today.set('news', res.message || 'ニュースを取得できませんでした。');
         paintPanel('news');
       }

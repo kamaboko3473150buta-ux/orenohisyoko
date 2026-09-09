@@ -7,7 +7,7 @@
 
 const https = require('node:https');
 const http = require('node:http');
-const { ipcMain } = require('electron');
+const { ipcMain, shell } = require('electron');
 const rss = require('./rss');
 const feeds = require('./feeds');
 const { generateText } = require('../claude');
@@ -81,7 +81,21 @@ async function collectArticles(feedList, region) {
   };
 }
 
+// 配信元を既定のブラウザで開く。
+//
+// **URLはRSSから来る＝他人が書いた値**なので、そのまま openExternal に渡さない。
+// http(s) 以外（file: や javascript: など）は開かない。
+function isSafeUrl(value) {
+  return /^https?:\/\/[^\s]+$/i.test(String(value == null ? '' : value).trim());
+}
+
 function register({ getSettings, getUsage, saveUsage }) {
+  ipcMain.handle('news:open', async (_e, url) => {
+    if (!isSafeUrl(url)) return { ok: false, message: 'このリンクは開けません。' };
+    await shell.openExternal(String(url).trim());
+    return { ok: true };
+  });
+
   ipcMain.handle('news:today', async (_e, { model } = {}) => {
     const settings = getSettings();
     const conf = settings.news || {};
@@ -112,6 +126,9 @@ function register({ getSettings, getUsage, saveUsage }) {
     return {
       ok: true,
       message: result.body,
+      // まとめ文の各行に付いた番号から配信元を開けるように、一覧も返す。
+      // 本文は渡していないので、ここで増える通信も費用も無い（すでに手元にある）。
+      articles: articles.map((a) => ({ title: a.title, link: a.link, source: a.source })),
       articleCount: articles.length,
       regionCount,
       failedFeeds: failed,
@@ -119,4 +136,6 @@ function register({ getSettings, getUsage, saveUsage }) {
   });
 }
 
-module.exports = { register, collectArticles, fetchText };
+module.exports = {
+  register, collectArticles, fetchText, isSafeUrl,
+};

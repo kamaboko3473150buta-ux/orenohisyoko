@@ -13,7 +13,13 @@ window.Today = (function () {
   // collapsed は「見出しだけの小さい形にしてある」かどうか。中身は消さない
   // （消すと聞き直すことになり、そのたびにAPI費用がかかる）。
   const store = {
-    date: ymd(), plan: '', news: '', collapsed: { plan: false, news: false },
+    date: ymd(),
+    plan: '',
+    news: '',
+    // まとめ文の各行に付いた番号から配信元を開くための一覧。
+    // 本文と一緒に持たないと、画面を移って戻ったときにリンクだけ死ぬ。
+    newsArticles: [],
+    collapsed: { plan: false, news: false },
   };
 
   function key(kind) {
@@ -27,6 +33,7 @@ window.Today = (function () {
     store.date = today;
     store.plan = '';
     store.news = '';
+    store.newsArticles = [];
     store.collapsed = { plan: false, news: false };
     return true;
   }
@@ -46,6 +53,13 @@ window.Today = (function () {
     clear(kind) {
       store[key(kind)] = '';
       store.collapsed[key(kind)] = false;
+    },
+    setNewsArticles(list) {
+      store.newsArticles = Array.isArray(list) ? list : [];
+    },
+    getNewsArticles() {
+      expireIfStale();
+      return store.newsArticles;
     },
     isCollapsed(kind) {
       expireIfStale();
