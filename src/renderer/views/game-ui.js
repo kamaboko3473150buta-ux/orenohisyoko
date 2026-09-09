@@ -43,6 +43,26 @@ window.GameUI = (function () {
     const table = App.h('div', { class: 'scene-table' });
     const el = App.h('div', { class: `scene mood-idle${opts.wide ? ' scene-wide' : ''}` }, [figure, table]);
 
+    // 採寸してある見た目は、その値で置く。無ければCSSの既定のまま。
+    // 髪型ごとに頭の位置が違うので、共通の値だと**どれかの髪型で頭が切れる**。
+    function applyFraming(mood) {
+      const f = Look.framing(mood);
+      const photo = photos[mood];
+      if (!f || !photo) return;
+      photo.style.setProperty('--zoom', `${f.zoom}%`);
+      photo.style.setProperty('--under', `${f.under}%`);
+    }
+    // 天板の色は場面ごとに変わるので、表示中のものを el に当てる。
+    function applyWood(mood) {
+      const f = Look.framing(mood);
+      if (!f) return;
+      el.style.setProperty('--wood-top', f.woodTop);
+      el.style.setProperty('--wood-bottom', f.woodBottom);
+      el.style.setProperty('--under', `${f.under}%`);
+    }
+    MOODS.forEach(applyFraming);
+    applyWood('idle');
+
     return {
       el,
       table,
@@ -56,6 +76,7 @@ window.GameUI = (function () {
         const next = MOODS.includes(kind) ? kind : 'idle';
         for (const m of MOODS) photos[m].hidden = m !== next;
         for (const m of MOODS) el.classList.toggle(`mood-${m}`, m === next);
+        applyWood(next);   // 天板の色と継ぎ目は場面ごとに違う
       },
     };
   }

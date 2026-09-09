@@ -26,6 +26,18 @@ const HAIR_COLORS = [
   { id: 'brown', label: 'ブラウン', note: '今の髪色' },
 ];
 
+// 息抜きの卓の写真をどう置くか（scripts/measure-scene.js が採寸して書き出す）。
+// 髪型ごとに頭の位置が違うので、共通の値だと**どれかの髪型で頭が切れる**。
+// 実際、ストレートロングは頭がボブより2.2%高く、そのぶん切れていた。
+// ファイルが無い・その髪型の分が無いときは、画面側のCSSの既定値のままになる。
+let FRAMING = {};
+try {
+  // eslint-disable-next-line global-require
+  FRAMING = require('./scene-framing.json');
+} catch {
+  FRAMING = {};   // 採寸していなくてもアプリは動く（既定の置き方になるだけ）
+}
+
 const DEFAULT_STYLE = 'bob';
 const DEFAULT_COLOR = 'brown';
 
@@ -54,8 +66,15 @@ function folderFor(appearance) {
   return a.hairColor === DEFAULT_COLOR ? a.hairStyle : `${a.hairStyle}-${a.hairColor}`;
 }
 
+// その見た目の卓の置き方。採寸していなければ空（画面側の既定が使われる）。
+function framingFor(appearance) {
+  return FRAMING[folderFor(appearance)] || {};
+}
+
 module.exports = {
   EXPRESSIONS,
+  FRAMING,
+  framingFor,
   HAIR_STYLES,
   HAIR_COLORS,
   DEFAULT_STYLE,

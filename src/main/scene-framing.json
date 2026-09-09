@@ -1,0 +1,54 @@
+{
+  "bob": {
+    "idle": {
+      "zoom": 100,
+      "under": 18.89,
+      "woodTop": "#74493b",
+      "woodBottom": "#6f4739",
+      "headTopPercent": 13.8,
+      "changed": false
+    },
+    "joy": {
+      "zoom": 105.44,
+      "under": 16.2,
+      "woodTop": "#775546",
+      "woodBottom": "#583529",
+      "headTopPercent": 16.3,
+      "changed": false
+    },
+    "sulk": {
+      "zoom": 105.44,
+      "under": 12.99,
+      "woodTop": "#664036",
+      "woodBottom": "#522f24",
+      "headTopPercent": 16,
+      "changed": true
+    }
+  },
+  "straight-long": {
+    "idle": {
+      "zoom": 100,
+      "under": 18.89,
+      "woodTop": "#6b3c31",
+      "woodBottom": "#64382b",
+      "headTopPercent": 13.7,
+      "changed": false
+    },
+    "joy": {
+      "zoom": 105.44,
+      "under": 16.2,
+      "woodTop": "#7a534a",
+      "woodBottom": "#683e31",
+      "headTopPercent": 15.8,
+      "changed": false
+    },
+    "sulk": {
+      "zoom": 105.44,
+      "under": 14.92,
+      "woodTop": "#6c4031",
+      "woodBottom": "#5d362b",
+      "headTopPercent": 13.7,
+      "changed": true
+    }
+  }
+}

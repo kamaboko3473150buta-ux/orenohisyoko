@@ -210,7 +210,11 @@ for (const btn of App.sidebarItems) {
 (async () => {
   try {
     const s = await window.hishoko.getSettings();
-    if (window.Look) Look.set(s.appearance);
+    if (window.Look) {
+      Look.set(s.appearance);
+      const meta = await window.hishoko.appearanceList();
+      Look.setFraming(meta.framing);
+    }
   } catch {
     // 設定が読めなくても既定の見た目で動く（見た目のために起動を止めない）
   }

@@ -52,6 +52,8 @@
   },
   "devDependencies": {
     "electron": "^33.4.11",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   }
 }

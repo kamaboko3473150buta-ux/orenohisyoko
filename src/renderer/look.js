@@ -13,6 +13,9 @@ window.Look = (function () {
   const EXTENSIONS = ['jpg', 'png'];
 
   let folder = DEFAULT_FOLDER;
+  // 息抜きの卓の置き方（scripts/measure-scene.js の採寸結果）。
+  // 見た目ごとに頭の位置が違うので、共通の値だとどれかの髪型で頭が切れる。
+  let framing = {};
 
   // 画像を読み込む。無ければ次の候補、最後は既定の見た目にたどり着く。
   //
@@ -64,6 +67,12 @@ window.Look = (function () {
     },
     // 見本を描くときだけ一時的に切り替えて、すぐ元に戻すために使う。
     setFolder(name) { folder = name || DEFAULT_FOLDER; return folder; },
+    setFraming(all) { framing = (all && typeof all === 'object') ? all : {}; },
+    // その見た目・その場面の置き方。無ければ null（CSSの既定のまま）。
+    framing(mood) {
+      const forLook = framing[folder];
+      return (forLook && forLook[mood]) || null;
+    },
     setImage,
     resolveUrl,
   };

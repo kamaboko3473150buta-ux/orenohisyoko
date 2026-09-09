@@ -136,6 +136,8 @@ function registerCommonHandlers() {
     colors: appearance.HAIR_COLORS,
     expressions: appearance.EXPRESSIONS,
     defaultFolder: appearance.folderFor({}),
+    // 息抜きの卓の置き方も渡す。見た目ごとに違うので、画面側で持てない。
+    framing: appearance.FRAMING,
   }));
 
   // モデルの一覧と、機能ごとの既定モデル定義を画面に渡す（Task 33）。

@@ -66,6 +66,7 @@ Views.salon = {
       await window.hishoko.saveSettings({ appearance: picked });
       // 保存できてから初めて、画面全体の見た目を切り替える。
       Look.set(picked);
+      Look.setFraming(meta.framing);   // 卓の置き方も見た目ごとに違う
       Hishoko.say('smile', 'こんな感じでしょうか。似合っていますか?');
       App.toast('髪型を変えました');
     });
