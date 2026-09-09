@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  MODELS, FEATURES, DEFAULT_MODEL_ID, findModel, findFeature, costUsd, costJpy, warningFor,
+  MODELS, FEATURES, DEFAULT_MODEL_ID, findModel, findFeature, costUsd, costJpy, warningFor, supportsEffort,
 } = require('../src/main/models');
 
 test('MODELSに4つのモデルがある', () => {
@@ -126,4 +126,21 @@ test('確認を出すモデルは、実際に既定より高い', () => {
 test('Fable 5.1 の費用は Opus 5 のちょうど2倍', () => {
   const usage = { inputTokens: 100000, outputTokens: 20000 };
   assert.strictEqual(costUsd('claude-fable-5-1', usage), costUsd('claude-opus-5', usage) * 2);
+});
+
+test('effort を送ってよいモデルかどうかを持っている', () => {
+  // Haiku 4.5 に output_config.effort を送ると400が返り、実行そのものが失敗する。
+  // 全モデルに一律で送っていたため、Haikuを選ぶと必ず失敗していた。
+  assert.strictEqual(supportsEffort('claude-haiku-4-5'), false);
+  assert.strictEqual(supportsEffort('claude-sonnet-5'), true);
+  assert.strictEqual(supportsEffort('claude-opus-5'), true);
+  assert.strictEqual(supportsEffort('claude-fable-5-1'), true);
+  assert.strictEqual(supportsEffort('知らないモデル'), true, '未知のIDは既定（Opus 5）に倒れる');
+});
+
+test('すべてのモデルが effort の対応可否を明示している', () => {
+  // 書き忘れると undefined になり、送ってはいけないモデルに送ってしまう
+  for (const m of MODELS) {
+    assert.strictEqual(typeof m.effort, 'boolean', `${m.label} に effort が無い`);
+  }
 });

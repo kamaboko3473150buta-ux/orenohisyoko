@@ -4,6 +4,8 @@
 
 // CommonJS から読み込むときは default 付き／無しの両方に備える
 const AnthropicModule = require('@anthropic-ai/sdk');
+const { supportsEffort } = require('./models');
+
 const Anthropic = AnthropicModule.default || AnthropicModule;
 
 // モデルを変えたいときはこの1行を書き換える。
@@ -125,13 +127,16 @@ async function generateText({
   const usedModel = model || MODEL;
   const client = new Anthropic({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 });
   try {
-    const res = await client.messages.create({
+    // effort（考える深さ）は対応しているモデルにだけ送る。
+    // Haiku 4.5 に送ると400が返り、実行そのものが失敗する。
+    const params = {
       model: usedModel,
       max_tokens: maxTokens || MAX_TOKENS,
-      output_config: { effort: 'low' },
       system,
       messages: [{ role: 'user', content: withDocuments(buildUserContent(user, cachePrefix), documents) }],
-    });
+    };
+    if (supportsEffort(usedModel)) params.output_config = { effort: 'low' };
+    const res = await client.messages.create(params);
     if (res.stop_reason === 'refusal') {
       return { ok: false, code: 'refusal', message: 'この内容では文面を作成できませんでした。書き方を変えてお試しください。' };
     }

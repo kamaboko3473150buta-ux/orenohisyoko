@@ -1162,6 +1162,13 @@ body.game-view main {
 }
 .home-panel.right::after { background: #f1f5fa; }
 
+/* 期限を過ぎた予定。今日ぶんと同じ札の中に並ぶので、色で見分けられるようにする
+   （混ぜて並べると、今日やることが何なのか分からなくなる）。 */
+.home-overdue {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 /* 頭の上の吹き出し。1行目が今日の天気、2行目があいさつ。 */
 .home-weather {
   display: block;

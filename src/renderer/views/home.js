@@ -80,14 +80,18 @@ window.Views = window.Views || {};
 
       let dueSoon = null;
       let todayTasks = [];
+      let overdueTasks = [];
       try {
         const result = await window.hishoko.taskList();
         dueSoon = result && result.dueSoon;
         // task:list が返すのは { groups, dueSoon }。tasks という名前では返ってこない
         // （ここを tasks と書いていたため、予定があるのに「ありません」と出ていた）。
         // 今日ぶんは groups.today に、期限切れは groups.overdue に入っている。
+        // 期限切れは今日の予定に混ぜない。昨日やり残したものが今日の欄に並ぶと、
+        // 今日やることが何なのか分からなくなる。下に分けて赤で出す。
         const groups = (result && result.groups) || {};
-        todayTasks = (groups.overdue || []).concat(groups.today || []);
+        todayTasks = groups.today || [];
+        overdueTasks = groups.overdue || [];
       } catch {
         // 締切が取れなくても、トップページの表示自体は続ける（時間帯のセリフにする）。
         dueSoon = null;
@@ -179,21 +183,49 @@ window.Views = window.Views || {};
         news: makePanel('news', 'right', '今日のニュース'),
       };
 
+      // 期限を過ぎたぶんの見出し。この行から次の空行までを赤で出す。
+      // 札の中身は1つの文字列として Today に持たせているので（画面を移っても
+      // 残すため）、色を変える範囲はこの目印で切り出す。
+      const OVERDUE_HEADING = '⚠ 期限を過ぎている予定';
+
+      // 見出しから次の空行までを赤で描く。残り（今日ぶんとAIの進め方）はそのままの色。
+      function paintPlanBody(body, text) {
+        body.textContent = '';
+        const start = text.indexOf(OVERDUE_HEADING);
+        if (start === -1) { body.textContent = text; return; }
+        const gap = text.indexOf('\n\n', start);
+        const end = gap === -1 ? text.length : gap;
+        body.appendChild(document.createTextNode(text.slice(0, start)));
+        body.appendChild(App.h('span', { class: 'home-overdue', text: text.slice(start, end) }));
+        body.appendChild(document.createTextNode(text.slice(end)));
+      }
+
       function paintPanel(kind) {
         const { panel, body } = panels[kind];
         const text = Today.get(kind);
-        body.textContent = text;
+        if (kind === 'plan') paintPlanBody(body, text);
+        else body.textContent = text;
         panel.hidden = !text;
         panel.classList.toggle('is-collapsed', Today.isCollapsed(kind));
       }
 
-      // 今日の予定。予定の箇条書きと、AIの進め方をひとつにまとめて出す。
-      // 箇条書きはアプリの中で数えるだけ（無料）で、AIに渡すのは進め方の相談だけ。
-      function listToday() {
-        if (todayTasks.length === 0) return '今日の予定はありません。';
-        return todayTasks
+      function bullets(list) {
+        return list
           .map((t) => (t.at ? `・${t.at} ${t.title}` : `・${t.title}`))
           .join('\n');
+      }
+
+      // 今日の予定。予定の箇条書きと、AIの進め方をひとつにまとめて出す。
+      // 箇条書きはアプリの中で数えるだけ（無料）で、AIに渡すのは進め方の相談だけ。
+      //
+      // 期限を過ぎたものは今日ぶんの下に、別の見出しを付けて出す。
+      // 混ぜてしまうと、今日やることが何なのか分からなくなる。
+      function listToday() {
+        const today = todayTasks.length === 0
+          ? '今日の予定はありません。'
+          : bullets(todayTasks);
+        if (overdueTasks.length === 0) return today;
+        return `${today}\n\n${OVERDUE_HEADING}\n${bullets(overdueTasks)}`;
       }
 
       async function loadPlan() {

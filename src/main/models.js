@@ -14,18 +14,22 @@ const CACHE_WRITE_MULTIPLIER = 1.25;
 
 // 料金は各モデルの実勢（1Mトークンあたりの米ドル）。
 // 実勢が変わったら、この一覧だけ直せばよい。
+// effort は output_config.effort（考える深さの指定）に対応しているかどうか。
+// **Haiku 4.5 だけ対応しておらず、送ると400が返って実行そのものが失敗する。**
+// 全モデルに一律で送っていたため、Haikuを選ぶと「リクエストの内容に問題がありました」
+// で必ず失敗していた（ニュース・翻訳など、Haikuで十分な仕事ほど踏みやすい）。
 const MODELS = [
   {
-    id: 'claude-fable-5-1', label: 'Fable 5.1', inputUsd: 10, outputUsd: 50, note: '最上位。長時間の自律作業や難しい推論向け。割高なので普段使いには要らない',
+    id: 'claude-fable-5-1', label: 'Fable 5.1', inputUsd: 10, outputUsd: 50, effort: true, note: '最上位。長時間の自律作業や難しい推論向け。割高なので普段使いには要らない',
   },
   {
-    id: 'claude-opus-5', label: 'Opus 5', inputUsd: 5, outputUsd: 25, note: '最も賢い。長い資料の構成や複雑な判断に',
+    id: 'claude-opus-5', label: 'Opus 5', inputUsd: 5, outputUsd: 25, effort: true, note: '最も賢い。長い資料の構成や複雑な判断に',
   },
   {
-    id: 'claude-sonnet-5', label: 'Sonnet 5', inputUsd: 2, outputUsd: 10, note: '日常の業務文書はこれで十分。費用は半分以下',
+    id: 'claude-sonnet-5', label: 'Sonnet 5', inputUsd: 2, outputUsd: 10, effort: true, note: '日常の業務文書はこれで十分。費用は半分以下',
   },
   {
-    id: 'claude-haiku-4-5', label: 'Haiku 4.5', inputUsd: 1, outputUsd: 5, note: '最も安い。短い定型の仕事向け',
+    id: 'claude-haiku-4-5', label: 'Haiku 4.5', inputUsd: 1, outputUsd: 5, effort: false, note: '最も安い。短い定型の仕事向け',
   },
 ];
 
@@ -69,6 +73,12 @@ function warningFor(id) {
   return `${model.label}は${how}の費用感です。切り替えてよいですか?`;
 }
 
+// output_config.effort を送ってよいモデルか。
+// 未知のIDは findModel が既定（Opus 5）に倒すので true になる。
+function supportsEffort(id) {
+  return findModel(id).effort === true;
+}
+
 function findFeature(id) {
   return FEATURES.find((f) => f.id === id);
 }
@@ -102,6 +112,7 @@ module.exports = {
   findModel,
   findFeature,
   warningFor,
+  supportsEffort,
   costUsd,
   costJpy,
 };
