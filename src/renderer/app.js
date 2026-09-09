@@ -147,6 +147,32 @@ const App = {
     this._toastTimer = setTimeout(() => { el.hidden = true; }, 2600);
   },
 
+  // 割高なモデルを選んだときに確認を出す。取り消したら元の選択に戻す。
+  //
+  // モデルの<select>は6画面にあるので、ここに1つ置いて各画面から呼ぶ。
+  // 画面ごとに書くと、警告の付け忘れた画面から黙って高いモデルを選べてしまう。
+  // 確認文（warn）はメインプロセスが単価から作ったものをそのまま使う。
+  wireModelWarning(select, models) {
+    let previous = select.value;
+    let reverting = false;
+    select.addEventListener('change', () => {
+      // 戻すために自分で起こした change では、確認をもう一度出さない
+      // （元が割高なモデルだったとき、閉じられない確認が続いてしまう）
+      if (reverting) return;
+      const picked = (models || []).find((m) => m.id === select.value);
+      const warn = picked && picked.warn;
+      if (warn && !window.confirm(warn)) {
+        reverting = true;
+        select.value = previous;                       // 取り消し
+        select.dispatchEvent(new Event('change'));     // 説明文など、changeを見ている表示も戻す
+        reverting = false;
+        return;
+      }
+      previous = select.value;
+    });
+    return select;
+  },
+
   // よく使うDOM生成
   h(tag, props = {}, children = []) {
     const el = document.createElement(tag);

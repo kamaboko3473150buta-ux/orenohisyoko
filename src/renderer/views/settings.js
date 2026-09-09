@@ -100,6 +100,7 @@ Views.settings = {
       });
       paintNote();
       select.addEventListener('change', paintNote);
+      App.wireModelWarning(select, modelMeta.models);
       modelSelects[f.id] = select;
       return App.h('div', { class: 'field' }, [App.h('label', { text: f.label }), select, noteEl]);
     });

@@ -21,7 +21,7 @@ Views.tasks = {
         if (settings.models.task === m.id) opt.selected = true;
         select.appendChild(opt);
       });
-      return select;
+      return App.wireModelWarning(select, modelMeta.models);
     }
     const parseModelSelect = buildModelSelect();
     const briefModelSelect = buildModelSelect();

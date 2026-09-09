@@ -8,7 +8,7 @@ const {
 } = require('../src/main/jsonfile');
 const { resolveBounds, boundsToSave, MIN_SIZE } = require('../src/main/window-state');
 const { summarize } = require('../src/main/usage');
-const { MODELS, FEATURES } = require('../src/main/models');
+const { MODELS, FEATURES, warningFor } = require('../src/main/models');
 const contactsLib = require('../src/main/contacts');
 const mailCompose = require('../src/main/mail-compose');
 const tasksFeature = require('../src/main/tasks-feature');
@@ -129,7 +129,12 @@ function registerCommonHandlers() {
 
   // モデルの一覧と、機能ごとの既定モデル定義を画面に渡す（Task 33）。
   // APIキーなど秘匿情報は含まない。単価はmodels.jsに一本化されているのでそのまま渡す。
-  ipcMain.handle('models:list', () => ({ models: MODELS, features: FEATURES }));
+  // 割高なモデルの確認文（warn）も一緒に渡す。画面ごとに文言を書くと
+  // 単価を直したときに直し漏れるので、文言はメインプロセス側で作る。
+  ipcMain.handle('models:list', () => ({
+    models: MODELS.map((m) => ({ ...m, warn: warningFor(m.id) })),
+    features: FEATURES,
+  }));
 
   ipcMain.handle('settings:counts', () => ({
     contacts: getContacts().contacts.length,

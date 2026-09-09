@@ -16,6 +16,9 @@ const CACHE_WRITE_MULTIPLIER = 1.25;
 // 実勢が変わったら、この一覧だけ直せばよい。
 const MODELS = [
   {
+    id: 'claude-fable-5-1', label: 'Fable 5.1', inputUsd: 10, outputUsd: 50, note: '最上位。長時間の自律作業や難しい推論向け。割高なので普段使いには要らない',
+  },
+  {
     id: 'claude-opus-5', label: 'Opus 5', inputUsd: 5, outputUsd: 25, note: '最も賢い。長い資料の構成や複雑な判断に',
   },
   {
@@ -42,6 +45,24 @@ const FEATURES = [
 // 例外を投げない設計にするため、呼び出し側はfindModelの戻り値が必ずモデルであることに頼れる。
 function findModel(id) {
   return MODELS.find((m) => m.id === id) || MODELS.find((m) => m.id === DEFAULT_MODEL_ID);
+}
+
+// 既定（Opus 5）より高いモデルを選んだときに出す確認文。無ければ空文字。
+//
+// 文言に「2倍」と直接書かず、上の単価から組み立てる。
+// 単価が変わったとき、警告文だけが古い数字のまま残るのを防ぐため。
+function warningFor(id) {
+  const model = findModel(id);
+  const base = MODELS.find((m) => m.id === DEFAULT_MODEL_ID);
+  if (!base || model.id === base.id) return '';
+  const inRatio = model.inputUsd / base.inputUsd;
+  const outRatio = model.outputUsd / base.outputUsd;
+  if (inRatio <= 1 && outRatio <= 1) return '';   // 安いモデルは黙って選ばせる
+  const fmt = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+  const how = inRatio === outRatio
+    ? `${base.label}の${fmt(inRatio)}倍`
+    : `${base.label}の入力${fmt(inRatio)}倍・出力${fmt(outRatio)}倍`;
+  return `${model.label}は${how}の費用感です。切り替えてよいですか?`;
 }
 
 function findFeature(id) {
@@ -76,6 +97,7 @@ module.exports = {
   CACHE_WRITE_MULTIPLIER,
   findModel,
   findFeature,
+  warningFor,
   costUsd,
   costJpy,
 };

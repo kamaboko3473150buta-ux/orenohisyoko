@@ -103,7 +103,7 @@ Views.docgen = {
         if (settings.models.docgen === m.id) opt.selected = true;
         select.appendChild(opt);
       });
-      return select;
+      return App.wireModelWarning(select, modelMeta.models);
     }
 
     const screenHost = App.h('div');

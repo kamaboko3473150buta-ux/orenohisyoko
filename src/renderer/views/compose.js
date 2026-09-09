@@ -253,6 +253,7 @@ Views.compose = {
       if (f.model === m.id) opt.selected = true;
       modelSelect.appendChild(opt);
     });
+    App.wireModelWarning(modelSelect, modelMeta.models);
     modelSelect.addEventListener('change', () => { f.model = modelSelect.value; });
 
     const errorEl = App.h('div', { class: 'error', hidden: true });

@@ -1,12 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  MODELS, FEATURES, DEFAULT_MODEL_ID, findModel, findFeature, costUsd, costJpy,
+  MODELS, FEATURES, DEFAULT_MODEL_ID, findModel, findFeature, costUsd, costJpy, warningFor,
 } = require('../src/main/models');
 
-test('MODELSに3つのモデルがある', () => {
-  assert.strictEqual(MODELS.length, 3);
-  assert.deepStrictEqual(MODELS.map((m) => m.id), ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5']);
+test('MODELSに4つのモデルがある', () => {
+  assert.strictEqual(MODELS.length, 4);
+  assert.deepStrictEqual(MODELS.map((m) => m.id), ['claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5']);
 });
 
 test('FEATURESに4つの機能があり、既定モデルを持つ', () => {
@@ -99,4 +99,29 @@ test('costUsd: キャッシュ項目が壊れた値でも落ちずに0扱いに�
     costUsd('claude-opus-5', { cacheReadTokens: 'abc', cacheCreationTokens: null }),
     0,
   );
+});
+
+test('既定より高いモデルを選んだときだけ確認文を出す', () => {
+  // 「2倍」の数字は単価から組み立てる。単価を直したとき文言だけ古い数字で残らないように。
+  assert.strictEqual(warningFor('claude-fable-5-1'), 'Fable 5.1はOpus 5の2倍の費用感です。切り替えてよいですか?');
+
+  // 既定と同じ・既定より安いものは黙って選ばせる（毎回確認が出ると邪魔になる）
+  assert.strictEqual(warningFor('claude-opus-5'), '');
+  assert.strictEqual(warningFor('claude-sonnet-5'), '');
+  assert.strictEqual(warningFor('claude-haiku-4-5'), '');
+  assert.strictEqual(warningFor('知らないモデル'), '', '未知のIDは既定に倒れるので確認は要らない');
+});
+
+test('確認を出すモデルは、実際に既定より高い', () => {
+  const base = MODELS.find((m) => m.id === DEFAULT_MODEL_ID);
+  for (const m of MODELS) {
+    const warned = warningFor(m.id) !== '';
+    const pricier = m.inputUsd > base.inputUsd || m.outputUsd > base.outputUsd;
+    assert.strictEqual(warned, pricier, `${m.label} の確認文と単価が食い違っている`);
+  }
+});
+
+test('Fable 5.1 の費用は Opus 5 のちょうど2倍', () => {
+  const usage = { inputTokens: 100000, outputTokens: 20000 };
+  assert.strictEqual(costUsd('claude-fable-5-1', usage), costUsd('claude-opus-5', usage) * 2);
 });

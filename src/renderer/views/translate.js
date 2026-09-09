@@ -33,7 +33,7 @@ Views.translate = {
         if (settings.models.translate === m.id) opt.selected = true;
         select.appendChild(opt);
       });
-      return select;
+      return App.wireModelWarning(select, modelMeta.models);
     }
 
     const errorEl = App.h('div', { class: 'error', hidden: true });
