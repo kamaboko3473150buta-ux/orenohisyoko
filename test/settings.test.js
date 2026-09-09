@@ -32,6 +32,7 @@ test('保存していない状態では、機能ごとの既定モデルが返�
   assert.strictEqual(s.models.task, 'claude-opus-5');
   assert.strictEqual(s.models.docgen, 'claude-sonnet-5');
   assert.strictEqual(s.models.translate, 'claude-sonnet-5');
+  assert.strictEqual(s.models.news, 'claude-haiku-4-5');
 });
 
 test('modelsを部分更新しても、言語翻訳の設定が消えない', () => {

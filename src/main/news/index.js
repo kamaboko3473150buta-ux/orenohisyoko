@@ -102,7 +102,9 @@ function register({ getSettings, getUsage, saveUsage }) {
       system: feeds.buildSystemPrompt(),
       user: feeds.buildUserPrompt({ articles, region: conf.region, today }),
       maxTokens: NEWS_MAX_TOKENS,
-      model: model || settings.models.news || settings.models.task,
+      // ニュースは独立した機能として設定できる（既定はHaiku 4.5）。
+      // タスクの設定に引きずられていたときは、Opus 5で1回6.5円かかっていた。
+      model: model || settings.models.news,
     });
     if (!result.ok) return result;
 

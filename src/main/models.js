@@ -39,6 +39,10 @@ const FEATURES = [
   { id: 'docgen', label: '資料作成', defaultModel: 'claude-sonnet-5' },
   // 翻訳はHaikuでも実用になる（要件どおり）ため、既定はSonnet 5にしつつ利用者が選べるようにする。
   { id: 'translate', label: '言語翻訳', defaultModel: 'claude-sonnet-5' },
+  // ニュースは渡した見出し40件から5件を選んで1〜2文にするだけで、賢さより
+  // 「書いていないことを足さない」が要る仕事。既定はHaiku 4.5にする。
+  // タスクと同じモデルに引きずられていたときは1回6.5円かかっていたが、これで1.3円になる。
+  { id: 'news', label: '今日のニュース', defaultModel: 'claude-haiku-4-5' },
 ];
 
 // idで探す。見つからない（未知・未指定）ときはOpus 5を返す。
