@@ -188,16 +188,40 @@ window.Views = window.Views || {};
       // 残すため）、色を変える範囲はこの目印で切り出す。
       const OVERDUE_HEADING = '⚠ 期限を過ぎている予定';
 
-      // 見出しから次の空行までを赤で描く。残り（今日ぶんとAIの進め方）はそのままの色。
+      // 箇条書きの1行から、その予定を引くための対応表。
+      // 行の文字列はこちらで組み立てているので（AIは通さない）、完全一致で引ける。
+      // 行程表を持つ予定だけを入れる。
+      const bulletToTask = new Map();
+
+      // 1行ずつ描く。
+      // - 「⚠ 期限を過ぎている予定」の見出しから次の空行までは赤
+      // - 行程表を持つ予定の行は、押すとスケジュール管理のその行程表へ飛ぶ
       function paintPlanBody(body, text) {
         body.textContent = '';
-        const start = text.indexOf(OVERDUE_HEADING);
-        if (start === -1) { body.textContent = text; return; }
-        const gap = text.indexOf('\n\n', start);
-        const end = gap === -1 ? text.length : gap;
-        body.appendChild(document.createTextNode(text.slice(0, start)));
-        body.appendChild(App.h('span', { class: 'home-overdue', text: text.slice(start, end) }));
-        body.appendChild(document.createTextNode(text.slice(end)));
+        let inOverdue = false;
+        String(text).split('\n').forEach((line, i) => {
+          if (i > 0) body.appendChild(document.createTextNode('\n'));
+          if (line.startsWith(OVERDUE_HEADING)) inOverdue = true;
+          else if (line.trim() === '') inOverdue = false;
+
+          const task = bulletToTask.get(line);
+          const node = task
+            ? App.h('a', {
+              class: 'plan-link',
+              href: '#',
+              title: `行程表を開く: ${task.title}`,
+              text: line,
+              onclick: (e) => {
+                e.preventDefault();
+                e.stopPropagation();   // 札の開閉まで動かさない
+                App.go('tasks', { planId: task.id });
+              },
+            })
+            : document.createTextNode(line);
+
+          if (!inOverdue) { body.appendChild(node); return; }
+          body.appendChild(App.h('span', { class: 'home-overdue' }, [node]));
+        });
       }
 
       // ニュースは行ごとに配信元へのリンクにする。
@@ -239,7 +263,12 @@ window.Views = window.Views || {};
 
       function bullets(list) {
         return list
-          .map((t) => (t.at ? `・${t.at} ${t.title}` : `・${t.title}`))
+          .map((t) => {
+            const line = t.at ? `・${t.at} ${t.title}` : `・${t.title}`;
+            // 行程表を持つ予定は、この行を押して行程表を開けるようにする
+            if (t.plan) bulletToTask.set(line, t);
+            return line;
+          })
           .join('\n');
       }
 
@@ -296,6 +325,11 @@ window.Views = window.Views || {};
       scene.appendChild(panels.plan.panel);
       scene.appendChild(panels.news.panel);
       root.appendChild(scene);
+
+      // 箇条書きと予定の対応表を作っておく。画面を移って戻ったときは札の中身が
+      // Today に残っていて loadPlan を通らないので、ここで作らないとリンクだけ死ぬ。
+      // タスクを数えるだけなのでAIは呼ばれない（無料）。
+      listToday();
 
       paintPanel('plan');
       paintPanel('news');

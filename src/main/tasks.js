@@ -69,6 +69,9 @@ function newTask({ title, start, end, at, who, kind, priority, note } = {}, nowI
     kind: kind || null,
     priority: normalizePriority(priority),
     note: note || '',
+    // 複数日にわたる予定（旅行・出張）の行程表。AIで作って本人が確認したものを入れる。
+    // 単発の予定では空のまま。
+    plan: '',
     done: false,
     createdAt: nowIso,
     doneAt: null,

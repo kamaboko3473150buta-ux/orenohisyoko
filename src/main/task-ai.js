@@ -110,7 +110,7 @@ function buildBriefSystemPrompt() {
 }
 
 // 未完了タスクの一覧（件名・期限・優先度）と今日の日付を埋め込む。0件でも壊れない。
-function buildBriefUserPrompt({ tasks, today } = {}) {
+function buildBriefUserPrompt({ tasks, today, plans } = {}) {
   const list = Array.isArray(tasks) ? tasks : [];
   const lines = list.map((t) => {
     const title = (t && clean(t.title)) || '(無題)';
@@ -121,14 +121,28 @@ function buildBriefUserPrompt({ tasks, today } = {}) {
     return `- ${title}（期限: ${due}${at} / 優先度: ${priority}）`;
   });
 
-  return [
+  const out = [
     `【今日の日付】${clean(today)}`,
     '',
     '【未完了のタスク一覧】',
     lines.length ? lines.join('\n') : '（未完了のタスクはありません）',
-    '',
-    '上記をふまえて、今日の進め方を2〜4文で助言してください。',
-  ].join('\n');
+  ];
+
+  // 行程表を持つ予定の、**今日ぶんだけ**を添える（旅行・出張の日）。
+  // 行程表まるごとを毎日渡すと、日数ぶんの文字が毎日費用になる。
+  const days = (Array.isArray(plans) ? plans : []).filter((p) => p && clean(p.day));
+  if (days.length) {
+    out.push('');
+    out.push('【今日ぶんの行程】');
+    days.forEach((p) => {
+      out.push(`■ ${clean(p.title) || '(無題)'}`);
+      out.push(clean(p.day));
+    });
+  }
+
+  out.push('');
+  out.push('上記をふまえて、今日の進め方を2〜4文で助言してください。');
+  return out.join('\n');
 }
 
 module.exports = {

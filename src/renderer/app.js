@@ -100,7 +100,7 @@ const App = {
     const myGeneration = this.generation;
     const buffer = document.createElement('div');
 
-    Promise.resolve(Views[viewName].render(buffer))
+    Promise.resolve(Views[viewName].render(buffer, opts))
       .then(() => {
         if (myGeneration !== this.generation) return; // すでに別の画面に移っている
         // 器そのものではなく中身だけを移す。器をそのまま入れると main と画面の間に

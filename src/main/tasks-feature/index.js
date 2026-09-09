@@ -13,12 +13,15 @@ const {
   buildParseSystemPrompt, buildParseUserPrompt, parseTaskJson,
   buildBriefSystemPrompt, buildBriefUserPrompt,
 } = require('../task-ai');
+const planner = require('../planner/prompt');
 const { generateText } = require('../claude');
 const { addUsage } = require('../usage');
 
 // タスクのAI連携は短いやり取りなので、メール本文生成（既定4000）より小さく抑える。
 const PARSE_MAX_TOKENS = 300;
 const BRIEF_MAX_TOKENS = 400;
+// 行程表は日数ぶんの箇条書きになるので、ここだけは長めに取る。
+const PLAN_MAX_TOKENS = 2500;
 
 // 'YYYY-MM-DD'（ローカル日付）。tasks.js の due と同じ形式・同じ基準（ローカル時刻）で揃える。
 function todayYmd(now = new Date()) {
@@ -85,14 +88,48 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
     return { ok: true, task, failed };
   });
 
+  // 複数日にわたる予定の行程表を作る。**ここでは保存しない。**
+  // 誤った行程をそのまま予定に入れてしまわないよう、画面で確認してから
+  // 改めて task:update で保存させる（AI取り込みと同じ考え方）。
+  ipcMain.handle('task:plan', async (_e, { id, given, model } = {}) => {
+    const task = readTasks().find((t) => t && t.id === id);
+    if (!task) return { ok: false, code: 'not_found', message: 'その予定が見つかりませんでした。' };
+    if (!planner.isMultiDay(task)) {
+      return {
+        ok: false,
+        code: 'single_day',
+        message: '行程表は、開始日と終了日が違う予定にだけ作れます。',
+      };
+    }
+
+    const settings = getSettings();
+    const result = await generateText({
+      apiKey: settings.apiKey,
+      system: planner.buildPlanSystemPrompt(),
+      user: planner.buildPlanUserPrompt({ task, given }),
+      maxTokens: PLAN_MAX_TOKENS,
+      model: model || settings.models.task,
+    });
+    if (!result.ok) return result;
+
+    saveUsage(addUsage(getUsage(), result.usage, new Date().toISOString()));
+    return { ok: true, plan: result.body };
+  });
+
   // 未完了タスクをもとに「今日の進め方」を相談する。タスクの中身は書き換えない。
   ipcMain.handle('task:brief', async (_e, { model } = {}) => {
     const settings = getSettings();
     const notDone = readTasks().filter((t) => t && !t.done);
+    const today = todayYmd();
+    // 行程表を持つ予定のうち、**今日ぶんだけ**を渡す。
+    // 行程表まるごとを毎日渡すと、日数ぶんの文字が毎日費用になる。
+    const todayPlans = notDone
+      .map((t) => ({ title: t.title, day: planner.extractDay(t.plan, today) }))
+      .filter((x) => x.day);
     const result = await generateText({
       apiKey: settings.apiKey,
       system: buildBriefSystemPrompt(),
-      user: buildBriefUserPrompt({ tasks: notDone, today: todayYmd() }),
+      user: buildBriefUserPrompt({ tasks: notDone, today, plans: todayPlans }),
       maxTokens: BRIEF_MAX_TOKENS,
       model: model || settings.models.task,
     });

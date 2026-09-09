@@ -4,7 +4,7 @@
 window.Views = window.Views || {};
 
 Views.tasks = {
-  async render(root) {
+  async render(root, opts = {}) {
     App.setTitle('タスク・スケジュール管理');
 
     const settings = await window.hishoko.getSettings();
@@ -74,6 +74,98 @@ Views.tasks = {
     // --- 確認・編集フォームの差し込み先 ---
     const formHost = App.h('div');
     root.appendChild(formHost);
+
+    // --- 行程表（複数日の予定）の差し込み先 ---
+    const planHost = App.h('div');
+    root.appendChild(planHost);
+
+    function closePlan() {
+      while (planHost.firstChild) planHost.removeChild(planHost.firstChild);
+    }
+
+    // 2日以上にわたる予定か。行程表を作れるのはこれだけ。
+    function isMultiDay(t) {
+      return Boolean(t && t.start && t.end && t.start !== t.end);
+    }
+
+    // 行程表の画面。既定事項を入れてAIに作らせ、**本人が確認・手直ししてから**保存する。
+    // 作った時点で保存しないのは、AI取り込みと同じ考え方（誤った行程をそのまま
+    // 予定に入れてしまわないため）。
+    function openPlan(task) {
+      closeForm();
+      closePlan();
+
+      const given = App.h('textarea', {
+        placeholder: '例: 16日10時に先方と打ち合わせ／宿は松山駅前／予算3万円',
+      });
+      const modelSelect = buildModelSelect();
+      const out = App.h('textarea', { class: 'plan-body' });
+      out.value = task.plan || '';
+      const errorEl = App.h('div', { class: 'error', hidden: true });
+      const makeBtn = App.h('button', { text: task.plan ? '作り直す' : 'プランを作る' });
+      const saveBtn = App.h('button', { text: 'この行程表を保存' });
+      const closeBtn = App.h('button', { class: 'secondary', text: '閉じる' });
+
+      function fail(message) {
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+      }
+
+      makeBtn.addEventListener('click', async () => {
+        errorEl.hidden = true;
+        makeBtn.disabled = true;
+        const before = makeBtn.textContent;
+        makeBtn.textContent = '考えています…';
+        try {
+          const res = await window.hishoko.taskPlan({
+            id: task.id, given: given.value, model: modelSelect.value,
+          });
+          if (!res.ok) { fail(res.message || '行程表を作れませんでした。'); return; }
+          out.value = res.plan;
+          Hishoko.say('smile', '行程表の案です。中身を確かめてから保存してください。');
+        } finally {
+          makeBtn.disabled = false;
+          makeBtn.textContent = before;
+        }
+      });
+
+      saveBtn.addEventListener('click', async () => {
+        await window.hishoko.taskUpdate({ id: task.id, patch: { plan: out.value } });
+        closePlan();
+        await refresh();
+        App.toast('行程表を保存しました');
+      });
+
+      closeBtn.addEventListener('click', closePlan);
+
+      planHost.appendChild(App.h('div', { class: 'card' }, [
+        App.h('div', { class: 'field' }, [
+          App.h('label', { text: `行程表: ${task.title || '(無題)'}` }),
+          App.h('div', { class: 'status', text: `${task.start} 〜 ${task.end}` }),
+        ]),
+        App.h('div', { class: 'field' }, [
+          App.h('label', { text: '決まっていること（任意）' }),
+          given,
+          App.h('div', {
+            class: 'status',
+            text: '決まっている時刻・場所・予算などを書くと、それを守った行程にします。'
+              + '調べないと分からないこと（便名・料金・営業時間）は書かせません。',
+          }),
+        ]),
+        App.h('div', { class: 'row' }, [
+          App.h('div', { class: 'field' }, [App.h('label', { text: '使うモデル（この回だけ）' }), modelSelect]),
+        ]),
+        App.h('div', { class: 'actions' }, [makeBtn]),
+        App.h('div', { class: 'status', text: '1回あたりおよそ3円です（Sonnet 5の場合）。' }),
+        errorEl,
+        App.h('div', { class: 'field' }, [
+          App.h('label', { text: '行程表（手直しできます）' }),
+          out,
+        ]),
+        App.h('div', { class: 'actions' }, [closeBtn, saveBtn]),
+      ]));
+      planHost.scrollIntoView({ block: 'nearest' });
+    }
 
     function closeForm() {
       while (formHost.firstChild) formHost.removeChild(formHost.firstChild);
@@ -307,10 +399,21 @@ Views.tasks = {
         App.h('span', { text: t.title || '(無題)' }),
       ]);
 
+      // 複数日の予定にだけ、行程表のボタンを出す。
+      // 行そのものを押すと編集フォームが開くので、ここでは伝播を止める。
+      const planBtn = isMultiDay(t)
+        ? App.h('button', {
+          class: 'secondary task-plan-btn',
+          text: t.plan ? '行程表' : '行程表を作る',
+          onclick: (ev) => { ev.stopPropagation(); openPlan(t); },
+        })
+        : null;
+
       const row = App.h('div', { class: rowClass.join(' ') }, [
         checkbox,
         title,
         App.h('span', { class: 'task-meta', text: formatMeta(t) }),
+        planBtn,
       ]);
       row.addEventListener('click', () => openForm(t, { existingId: t.id }));
       return row;
@@ -364,5 +467,13 @@ Views.tasks = {
     }
 
     await refresh();
+
+    // トップページの「今日の予定」から予定名を押して来たときは、その行程表を開く。
+    if (opts.planId) {
+      const { groups } = await window.hishoko.taskList();
+      const all = Object.values(groups || {}).flat();
+      const target = all.find((t) => t && t.id === opts.planId);
+      if (target) openPlan(target);
+    }
   },
 };

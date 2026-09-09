@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('hishoko', {
   // 今日のニュース（RSSを直接取り、見出しだけAIに渡す）
   newsToday: (args) => ipcRenderer.invoke('news:today', args),
   newsOpen: (url) => ipcRenderer.invoke('news:open', url),
+  taskPlan: (args) => ipcRenderer.invoke('task:plan', args),
 
   // 資料作成の下書き
   docDraftList: () => ipcRenderer.invoke('doc:draftList'),

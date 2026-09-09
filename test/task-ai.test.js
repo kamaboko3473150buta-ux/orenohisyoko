@@ -137,3 +137,25 @@ test('未完了が0件でもプロンプトが壊れない', () => {
   const u = buildBriefUserPrompt({ tasks: [], today: '2026-09-04' });
   assert.ok(u.includes('2026-09-04'));
 });
+
+test('今日ぶんの行程は、渡されたときだけ本文に入る', () => {
+  // 行程表まるごとではなく今日ぶんだけを渡す。まるごとだと日数ぶんの文字が毎日費用になる。
+  const base = { tasks: [], today: '2026-09-16' };
+  assert.ok(!buildBriefUserPrompt(base).includes('今日ぶんの行程'), '無いときは見出しごと出さない');
+  assert.ok(!buildBriefUserPrompt({ ...base, plans: [] }).includes('今日ぶんの行程'));
+
+  const withPlan = buildBriefUserPrompt({
+    ...base,
+    plans: [{ title: '東京出張', day: '【2026/9/16（水）】\n・10:00 打ち合わせ' }],
+  });
+  assert.ok(withPlan.includes('今日ぶんの行程'));
+  assert.ok(withPlan.includes('東京出張'));
+  assert.ok(withPlan.includes('10:00 打ち合わせ'));
+});
+
+test('中身の無い行程は捨てる（見出しだけが残らないように）', () => {
+  const p = buildBriefUserPrompt({
+    tasks: [], today: '2026-09-16', plans: [{ title: 'x', day: '' }, { title: 'y', day: '   ' }, null],
+  });
+  assert.ok(!p.includes('今日ぶんの行程'));
+});
