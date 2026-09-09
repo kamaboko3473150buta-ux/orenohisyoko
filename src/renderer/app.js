@@ -205,4 +205,14 @@ for (const btn of App.sidebarItems) {
   btn.addEventListener('click', () => App.go(btn.dataset.view));
 }
 
-App.go('home');
+// 秘書子の見た目は、最初の画面を描く前に読む。
+// あとから読むと、一瞬だけ既定の髪型で描かれてから切り替わる。
+(async () => {
+  try {
+    const s = await window.hishoko.getSettings();
+    if (window.Look) Look.set(s.appearance);
+  } catch {
+    // 設定が読めなくても既定の見た目で動く（見た目のために起動を止めない）
+  }
+  App.go('home');
+})();

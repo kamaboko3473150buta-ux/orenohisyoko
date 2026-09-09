@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('hishoko', {
   newsToday: (args) => ipcRenderer.invoke('news:today', args),
   newsOpen: (url) => ipcRenderer.invoke('news:open', url),
   taskPlan: (args) => ipcRenderer.invoke('task:plan', args),
+  appearanceList: () => ipcRenderer.invoke('appearance:list'),
 
   // 資料作成の下書き
   docDraftList: () => ipcRenderer.invoke('doc:draftList'),

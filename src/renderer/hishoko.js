@@ -3,12 +3,13 @@
 // App（画面ルーター）にはまだ何も定義されていない時点で動く可能性があるため、
 // App.h には依存せず、素のDOM操作だけで組み立てる。
 //
-// 画像 assets/hishoko/<expression>.png はまだ配置されていない前提。
+// 画像は assets/hishoko/<見た目>/<表情>.jpg（look.js が場所を決める）。
 // 読み込みに失敗しても img要素を隠すだけで、吹き出し自体は問題なく表示され続ける。
 
 window.Hishoko = (function () {
   const STORAGE_KEY = 'hishoko.collapsed';
-  const EXPRESSIONS = ['normal', 'smile', 'thinking', 'trouble', 'hurry', 'praise'];
+  // sulk（ムッとした顔）は今どこからも呼んでいないが、画像はそろえてある。
+  const EXPRESSIONS = ['normal', 'smile', 'thinking', 'trouble', 'hurry', 'praise', 'sulk'];
 
   let widget = null;
   let bubble = null;
@@ -66,7 +67,7 @@ window.Hishoko = (function () {
     img.className = 'hishoko-img';
     img.alt = '秘書子';
     // 画像が未配置（またはパスが誤り）でも吹き出し機能自体は壊さない。
-    img.addEventListener('error', () => { img.style.display = 'none'; });
+    // 読み込みの失敗は Look.setImage が拾い、次の候補・既定の見た目へ落とす。
 
     figure.appendChild(fallback);
     figure.appendChild(img);
@@ -90,9 +91,8 @@ window.Hishoko = (function () {
 
   function setExpression(expression) {
     const key = EXPRESSIONS.includes(expression) ? expression : 'normal';
-    img.style.display = ''; // 前回失敗していても、表情が変わるたびに再挑戦する
-    // index.html（src/renderer/）から見て assets/ はリポジトリ直下にある。
-    img.src = `../../assets/hishoko/${key}.png`;
+    // 美容室で選んだ見た目のフォルダから読む。無ければ既定の見た目に落ちる。
+    Look.setImage(img, 'hishoko', key);
   }
 
   // 表情と一言を出す。

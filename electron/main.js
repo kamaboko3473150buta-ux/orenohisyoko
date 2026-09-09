@@ -9,6 +9,7 @@ const {
 const { resolveBounds, boundsToSave, MIN_SIZE } = require('../src/main/window-state');
 const { summarize } = require('../src/main/usage');
 const { MODELS, FEATURES, warningFor } = require('../src/main/models');
+const appearance = require('../src/main/appearance');
 const contactsLib = require('../src/main/contacts');
 const mailCompose = require('../src/main/mail-compose');
 const tasksFeature = require('../src/main/tasks-feature');
@@ -110,6 +111,7 @@ function registerCommonHandlers() {
       mailcheck: s.mailcheck,
       hasMailPassword: Boolean(s.mailAppPassword),
       news: s.news,
+      appearance: s.appearance,
     };
   });
 
@@ -124,8 +126,17 @@ function registerCommonHandlers() {
       defaultMailer: s.defaultMailer,
       defaultTaskInput: s.defaultTaskInput,
       models: s.models,
+      appearance: s.appearance,
     };
   });
+
+  // 秘書子の見た目（美容室）。選べる髪型・髪色の一覧を画面に渡す。
+  ipcMain.handle('appearance:list', () => ({
+    styles: appearance.HAIR_STYLES,
+    colors: appearance.HAIR_COLORS,
+    expressions: appearance.EXPRESSIONS,
+    defaultFolder: appearance.folderFor({}),
+  }));
 
   // モデルの一覧と、機能ごとの既定モデル定義を画面に渡す（Task 33）。
   // APIキーなど秘匿情報は含まない。単価はmodels.jsに一本化されているのでそのまま渡す。

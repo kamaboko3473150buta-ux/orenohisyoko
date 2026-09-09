@@ -97,12 +97,13 @@ window.Views = window.Views || {};
         dueSoon = null;
       }
 
-      const bgFile = isDaytime(new Date()) ? 'day.jpg' : 'night.jpg';
+      const bgName = isDaytime(new Date()) ? 'day' : 'night';
 
-      const scene = App.h('div', {
-        class: 'home-office',
-        // index.html（src/renderer/）から見て assets/ はリポジトリ直下にある。hishoko.jsと同じ書き方。
-        style: `background-image:url('../../assets/office/${bgFile}')`,
+      const scene = App.h('div', { class: 'home-office' });
+      // 美容室で選んだ見た目の背景を貼る。無ければ既定の見た目に落ちる。
+      // 背景は読み込みの失敗を拾えないので、先に試してから貼る。
+      Look.resolveUrl('office', bgName).then((url) => {
+        if (url) scene.style.backgroundImage = `url('${url}')`;
       });
 
       const bubbleText = App.h('p', {});

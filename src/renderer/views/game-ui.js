@@ -32,7 +32,8 @@ window.GameUI = (function () {
     const photos = {};
     const figure = App.h('div', { class: 'scene-figure' });
     for (const mood of MOODS) {
-      const img = App.h('img', { class: `scene-photo ${mood}`, src: `../../assets/games/scene-${mood}.jpg`, alt: '' });
+      const img = App.h('img', { class: `scene-photo ${mood}`, alt: '' });
+      Look.setImage(img, 'games', `scene-${mood}`);
       img.hidden = mood !== 'idle';
       photos[mood] = img;
       figure.appendChild(img);

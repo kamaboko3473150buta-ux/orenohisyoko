@@ -1162,6 +1162,37 @@ body.game-view main {
 }
 .home-panel.right::after { background: #f1f5fa; }
 
+/* --- 美容室（見た目の選択） --- */
+
+.salon-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.salon-chip {
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+}
+.salon-chip:hover { border-color: var(--accent); background: var(--accent-weak); }
+.salon-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 表情の見本。丸枠と同じ切り抜き方（円）で出さないと、
+   実際に画面へ出たときの見え方と食い違う。 */
+.salon-preview { display: flex; flex-wrap: wrap; gap: 10px; }
+.salon-face-box {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--accent);
+  background: var(--accent-weak);
+  flex: 0 0 auto;
+}
+.salon-face { width: 100%; height: 100%; object-fit: cover; display: block; }
+
 /* 行程表を持つ予定の行。押すとスケジュール管理のその行程表へ飛ぶ。 */
 .plan-link {
   color: inherit;

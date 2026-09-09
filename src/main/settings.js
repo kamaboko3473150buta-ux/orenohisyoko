@@ -6,6 +6,7 @@ const { readJson, writeJson } = require('./jsonfile');
 const { FEATURES, findModel } = require('./models');
 const { normalizeWatchList, normalizeMatch, normalizeDays, DEFAULT_DAYS } = require('./mailcheck/query');
 const { normalizeFeeds, normalizeRegion } = require('./news/feeds');
+const { normalizeAppearance } = require('./appearance');
 
 // 機能ごとの既定モデル（FEATURESのdefaultModelそのまま）。
 // 例: { mail: 'claude-opus-5', task: 'claude-opus-5', docgen: 'claude-sonnet-5' }
@@ -28,6 +29,8 @@ const DEFAULT_SETTINGS = {
   },
   // 今日のニュース。住んでいる地域と、見に行く配信の一覧。
   news: { region: '', feeds: [] },
+  // 秘書子の見た目（美容室で変える）。
+  appearance: { hairStyle: 'bob', hairColor: 'brown' },
 };
 
 function normalizeNews(raw) {
@@ -76,6 +79,7 @@ function loadSettings(filePath, crypto) {
     models: normalizeModels(raw.models),
     mailcheck: normalizeMailcheck(raw.mailcheck),
     news: normalizeNews(raw.news),
+    appearance: normalizeAppearance(raw.appearance),
     apiKey: '',
     encrypted: false,
     mailAppPassword: '',
@@ -144,6 +148,11 @@ function saveSettings(filePath, patch, crypto) {
 
   if (Object.prototype.hasOwnProperty.call(patch, 'mailcheck')) {
     next.mailcheck = normalizeMailcheck({ ...(raw.mailcheck || {}), ...(patch.mailcheck || {}) });
+  }
+
+  // 見た目も入れ子。髪型だけ変えても髪色が消えないようマージする。
+  if (Object.prototype.hasOwnProperty.call(patch, 'appearance')) {
+    next.appearance = normalizeAppearance({ ...(raw.appearance || {}), ...(patch.appearance || {}) });
   }
 
   for (const field of ['signature', 'defaultTone', 'defaultMailer', 'defaultTaskInput']) {
