@@ -28,8 +28,8 @@ test('保存していない状態では既定値が返る', () => {
 
 test('保存していない状態では、機能ごとの既定モデルが返る（資料作成・言語翻訳はSonnet 5）', () => {
   const s = loadSettings(tmpFile(), fakeCrypto);
-  assert.strictEqual(s.models.mail, 'claude-opus-5');
-  assert.strictEqual(s.models.task, 'claude-opus-5');
+  assert.strictEqual(s.models.mail, 'claude-sonnet-5');
+  assert.strictEqual(s.models.task, 'claude-sonnet-5');
   assert.strictEqual(s.models.docgen, 'claude-sonnet-5');
   assert.strictEqual(s.models.translate, 'claude-sonnet-5');
   assert.strictEqual(s.models.news, 'claude-haiku-4-5');
@@ -55,8 +55,8 @@ test('modelsを部分更新しても、他の機能の設定が消えない', ()
   saveSettings(f, { models: { docgen: 'claude-haiku-4-5' } }, fakeCrypto);
   const s = loadSettings(f, fakeCrypto);
   assert.strictEqual(s.models.docgen, 'claude-haiku-4-5', '変えた方が反映される');
-  assert.strictEqual(s.models.mail, 'claude-opus-5', 'メールは既定のまま残る');
-  assert.strictEqual(s.models.task, 'claude-opus-5', 'タスクは既定のまま残る');
+  assert.strictEqual(s.models.mail, 'claude-sonnet-5', 'メールは既定のまま残る');
+  assert.strictEqual(s.models.task, 'claude-sonnet-5', 'タスクは既定のまま残る');
 });
 
 test('modelsを2回に分けて更新しても、両方の変更が残る', () => {

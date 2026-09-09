@@ -11,8 +11,9 @@ test('MODELSに4つのモデルがある', () => {
 
 test('FEATURESに5つの機能があり、既定モデルを持つ', () => {
   assert.strictEqual(FEATURES.length, 5);
-  assert.strictEqual(findFeature('mail').defaultModel, 'claude-opus-5');
-  assert.strictEqual(findFeature('task').defaultModel, 'claude-opus-5');
+  // ニュースだけ Haiku 4.5、ほかは Sonnet 5（実際に生成物を見比べて決めた）
+  assert.strictEqual(findFeature('mail').defaultModel, 'claude-sonnet-5');
+  assert.strictEqual(findFeature('task').defaultModel, 'claude-sonnet-5');
   assert.strictEqual(findFeature('docgen').defaultModel, 'claude-sonnet-5');
   assert.strictEqual(findFeature('translate').defaultModel, 'claude-sonnet-5');
   // 見出しを選んで短くするだけの仕事なので、賢いモデルを当てても結果は変わらない

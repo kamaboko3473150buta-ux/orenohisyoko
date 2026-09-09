@@ -23,25 +23,31 @@ const MODELS = [
     id: 'claude-fable-5-1', label: 'Fable 5.1', inputUsd: 10, outputUsd: 50, effort: true, note: '最上位。長時間の自律作業や難しい推論向け。割高なので普段使いには要らない',
   },
   {
-    id: 'claude-opus-5', label: 'Opus 5', inputUsd: 5, outputUsd: 25, effort: true, note: '最も賢い。長い資料の構成や複雑な判断に',
+    id: 'claude-opus-5', label: 'Opus 5', inputUsd: 5, outputUsd: 25, effort: true, note: '賢い。長い資料の構成や、お詫び・交渉など難しい文面に',
   },
   {
-    id: 'claude-sonnet-5', label: 'Sonnet 5', inputUsd: 2, outputUsd: 10, effort: true, note: '日常の業務文書はこれで十分。費用は半分以下',
+    id: 'claude-sonnet-5', label: 'Sonnet 5', inputUsd: 2, outputUsd: 10, effort: true, note: '普段はこれ。日常の業務文書と翻訳はこれで十分で、Opus 5の4割の費用',
   },
   {
-    id: 'claude-haiku-4-5', label: 'Haiku 4.5', inputUsd: 1, outputUsd: 5, effort: false, note: '最も安い。短い定型の仕事向け',
+    id: 'claude-haiku-4-5', label: 'Haiku 4.5', inputUsd: 1, outputUsd: 5, effort: false, note: '最も安い。渡した材料を選んで短くする仕事向け（ニュースなど）',
   },
 ];
 
-// 全機能の既定であり、モデルIDが未知のときの最後の拠り所。
-// これまで全機能がこのモデル固定だったため、既存の記録・呼び出しとの互換のために動かさない。
+// モデルIDが未知のときの最後の拠り所であり、割高かどうかを比べる基準。
+// 機能ごとの既定は下の FEATURES 側で持つ（ここはもう「全機能の既定」ではない）。
+// 既存の記録・呼び出しとの互換のために動かさない。
 const DEFAULT_MODEL_ID = 'claude-opus-5';
 
+// 機能ごとの既定モデル。**ニュースだけ Haiku 4.5、ほかは Sonnet 5**。
+// 実際に訳文・文面を見比べて決めた（利用者の判断）。
 const FEATURES = [
-  { id: 'mail', label: 'メール文面作成', defaultModel: 'claude-opus-5' },
-  { id: 'task', label: 'タスクの取り込み・案内', defaultModel: 'claude-opus-5' },
+  // 定型の連絡文ならOpusとの差はほぼ出ない。お詫び・断り・交渉のときだけ
+  // 画面側でOpus 5に上げれば足りる。
+  { id: 'mail', label: 'メール文面作成', defaultModel: 'claude-sonnet-5' },
+  { id: 'task', label: 'タスクの取り込み・案内', defaultModel: 'claude-sonnet-5' },
   { id: 'docgen', label: '資料作成', defaultModel: 'claude-sonnet-5' },
-  // 翻訳はHaikuでも実用になる（要件どおり）ため、既定はSonnet 5にしつつ利用者が選べるようにする。
+  // 翻訳はHaikuだと用語を外す（ベトナム語で実測。「証明書」を資格証の語にする、
+  // 「領収証」に原文に無い「商品購入」を足す）。Sonnet 5 から下げない。
   { id: 'translate', label: '言語翻訳', defaultModel: 'claude-sonnet-5' },
   // ニュースは渡した見出し40件から5件を選んで1〜2文にするだけで、賢さより
   // 「書いていないことを足さない」が要る仕事。既定はHaiku 4.5にする。
