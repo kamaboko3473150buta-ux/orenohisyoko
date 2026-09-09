@@ -121,3 +121,12 @@ test('chunkItemsは{index,text}形式のオブジェクト配列でも動く（s
   assert.strictEqual(chunks.length, 1);
   assert.deepStrictEqual(chunks[0], items);
 });
+
+test('期限や範囲の境目を変えさせない指示が入っている', () => {
+  // 「12月20日までに」がベトナム語で「20日より前」と訳され、20日が対象から
+  // 外れた（実測）。助成の締切なので、1日ぶん狭くなるのは実害になる。
+  const s = buildTranslateSystemPrompt();
+  assert.ok(s.includes('までに'));
+  assert.ok(s.includes('境目を含むかどうかを変えない'));
+  assert.ok(s.includes('未満'), '含まない側の言い方も示す（片方だけだと逆に倒れる）');
+});
