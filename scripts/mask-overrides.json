@@ -1,0 +1,170 @@
+{
+  "_comment": [
+    "絵ごとの調整。値は画像の幅・高さに対する割合 [x0, y0, x1, y1]。",
+    "共通の判定だけでは、髪と同じ色の木製家具まで拾ってしまうため。",
+    "地図で実測した位置: 息抜きは天板が y>=70%・左の木製棚が x<30%、",
+    "オフィスは右のドラセナの幹（x>90%, y=45〜80%）が誤検出源。",
+    "hairRoi と skinRoi を分けるのは、息抜きで手が天板の上（y=65〜75%）にあるため。",
+    "head は頭の位置と幅（px）。自動検出が外れる絵だけ書く。"
+  ],
+  "office/bob/day.jpg": {
+    "hairRoi": [
+      0.44,
+      0.06,
+      0.62,
+      0.34
+    ],
+    "skinRoi": [
+      0.4,
+      0.08,
+      0.66,
+      0.5
+    ]
+  },
+  "office/bob/night.jpg": {
+    "hairRoi": [
+      0.44,
+      0.06,
+      0.62,
+      0.34
+    ],
+    "skinRoi": [
+      0.4,
+      0.08,
+      0.66,
+      0.5
+    ],
+    "head": {
+      "top": 0.12,
+      "width": 114
+    }
+  },
+  "office/straight-long/day.jpg": {
+    "hairRoi": [
+      0.44,
+      0.06,
+      0.64,
+      0.36
+    ],
+    "skinRoi": [
+      0.4,
+      0.08,
+      0.66,
+      0.5
+    ]
+  },
+  "office/straight-long/night.jpg": {
+    "hairRoi": [
+      0.44,
+      0.06,
+      0.64,
+      0.36
+    ],
+    "skinRoi": [
+      0.4,
+      0.08,
+      0.66,
+      0.5
+    ]
+  },
+  "games/bob/scene-idle.jpg": {
+    "hairRoi": [
+      0.32,
+      0.05,
+      0.68,
+      0.68
+    ],
+    "skinRoi": [
+      0.3,
+      0.05,
+      0.7,
+      0.8
+    ]
+  },
+  "games/bob/scene-joy.jpg": {
+    "hairRoi": [
+      0.3,
+      0.05,
+      0.7,
+      0.68
+    ],
+    "skinRoi": [
+      0.2,
+      0.05,
+      0.8,
+      0.8
+    ]
+  },
+  "games/bob/scene-sulk.jpg": {
+    "hairRoi": [
+      0.32,
+      0.05,
+      0.68,
+      0.68
+    ],
+    "skinRoi": [
+      0.3,
+      0.05,
+      0.7,
+      0.8
+    ]
+  },
+  "games/straight-long/scene-idle.jpg": {
+    "hairRoi": [
+      0.32,
+      0.05,
+      0.68,
+      0.7
+    ],
+    "skinRoi": [
+      0.3,
+      0.05,
+      0.7,
+      0.8
+    ]
+  },
+  "games/straight-long/scene-joy.jpg": {
+    "hairRoi": [
+      0.28,
+      0.05,
+      0.72,
+      0.7
+    ],
+    "skinRoi": [
+      0.18,
+      0.05,
+      0.82,
+      0.8
+    ]
+  },
+  "games/straight-long/scene-sulk.jpg": {
+    "hairRoi": [
+      0.32,
+      0.05,
+      0.68,
+      0.7
+    ],
+    "skinRoi": [
+      0.3,
+      0.05,
+      0.7,
+      0.8
+    ]
+  },
+  "hishoko/bob/smile.png": {
+    "hairRoi": [
+      0.17,
+      0,
+      0.85,
+      1
+    ]
+  },
+  "hishoko/bob/trouble.png": {
+    "hairRoi": [
+      0.17,
+      0,
+      0.85,
+      1
+    ]
+  }
+}
