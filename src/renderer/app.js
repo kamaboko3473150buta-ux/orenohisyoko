@@ -66,6 +66,9 @@ const App = {
 
   go(viewName, opts = {}) {
     this.current = viewName;
+    // 画面ごとの「戻る」の割り込みは、画面を移ったら必ず捨てる
+    // （前の画面のフォームを閉じようとして落ちるのを防ぐ）。
+    this.beforeBack = null;
     // 上に戻る先がある画面だけ「戻る」を出す（トップページには出さない）。
     this.backBtn.hidden = !this.parentOf(viewName);
     this.el.innerHTML = '';
@@ -123,6 +126,10 @@ const App = {
   },
 
   back() {
+    // 画面の中でフォームや札を開いているときは、まずそれを閉じる。
+    // 予定を編集している途中に「戻る」でトップまで飛ばされると、
+    // 一覧に戻るのにもう一度サイドバーを押すことになる。
+    if (typeof this.beforeBack === 'function' && this.beforeBack()) return;
     const parent = this.parentOf(this.current);
     if (parent) this.go(parent);
   },

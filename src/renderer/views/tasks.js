@@ -83,9 +83,10 @@ Views.tasks = {
       while (planHost.firstChild) planHost.removeChild(planHost.firstChild);
     }
 
-    // 2日以上にわたる予定か。行程表を作れるのはこれだけ。
-    function isMultiDay(t) {
-      return Boolean(t && t.start && t.end && t.start !== t.end);
+    // 行程表を作れる予定か。日付がまったく無いものだけ除く。
+    // 1日で終わる予定にも行程表は要る（終日の会議・イベントなど）。
+    function canPlan(t) {
+      return Boolean(t && (t.start || t.end));
     }
 
     // 行程表の画面。既定事項を入れてAIに作らせ、**本人が確認・手直ししてから**保存する。
@@ -141,14 +142,15 @@ Views.tasks = {
       planHost.appendChild(App.h('div', { class: 'card' }, [
         App.h('div', { class: 'field' }, [
           App.h('label', { text: `行程表: ${task.title || '(無題)'}` }),
-          App.h('div', { class: 'status', text: `${task.start} 〜 ${task.end}` }),
+          App.h('div', { class: 'status', text: task.start === task.end ? String(task.start || task.end || '') : `${task.start || ''} 〜 ${task.end || ''}` }),
         ]),
         App.h('div', { class: 'field' }, [
           App.h('label', { text: '決まっていること（任意）' }),
           given,
           App.h('div', {
             class: 'status',
-            text: '決まっている時刻・場所・予算などを書くと、それを守った行程にします。'
+            text: '決まっている時刻・場所・予算などを書くと、それを守ったうえで、'
+              + '決まっていないところは秘書子が案を出します。'
               + '調べないと分からないこと（便名・料金・営業時間）は書かせません。',
           }),
         ]),
@@ -156,7 +158,7 @@ Views.tasks = {
           App.h('div', { class: 'field' }, [App.h('label', { text: '使うモデル（この回だけ）' }), modelSelect]),
         ]),
         App.h('div', { class: 'actions' }, [makeBtn]),
-        App.h('div', { class: 'status', text: '1回あたりおよそ3円です（Sonnet 5の場合）。' }),
+        App.h('div', { class: 'status', text: '1回あたりおよそ3〜5円です（Sonnet 5の場合）。' }),
         errorEl,
         App.h('div', { class: 'field' }, [
           App.h('label', { text: '行程表（手直しできます）' }),
@@ -205,6 +207,15 @@ Views.tasks = {
       const saveBtn = App.h('button', { text: '保存' });
       const cancelBtn = App.h('button', { class: 'secondary', text: 'キャンセル' });
       const deleteBtn = isEdit ? App.h('button', { class: 'secondary', text: '削除' }) : null;
+      // 内容を見ている流れのまま行程表に入れるようにする。
+      // 一覧の右端のボタンまで戻らせるのは遠回り。
+      const planBtn = (isEdit && canPlan(initial))
+        ? App.h('button', {
+          class: 'secondary',
+          text: initial.plan ? '行程表を見る' : '行程表を作る',
+          onclick: () => openPlan(initial),
+        })
+        : null;
 
       const notice = failed
         ? App.h('div', { class: 'status', text: '読み取れなかったので件名だけ入れました。内容を確認してください。' })
@@ -271,7 +282,7 @@ Views.tasks = {
         App.h('div', { class: 'field' }, [App.h('label', { text: '優先度' }), priorityInput]),
         App.h('div', { class: 'field' }, [App.h('label', { text: 'メモ（任意）' }), noteInput]),
         errorEl,
-        App.h('div', { class: 'actions' }, [deleteBtn, cancelBtn, saveBtn].filter(Boolean)),
+        App.h('div', { class: 'actions' }, [deleteBtn, planBtn, cancelBtn, saveBtn].filter(Boolean)),
       ]);
     }
 
@@ -399,9 +410,9 @@ Views.tasks = {
         App.h('span', { text: t.title || '(無題)' }),
       ]);
 
-      // 複数日の予定にだけ、行程表のボタンを出す。
+      // 日付のある予定に、行程表のボタンを出す。
       // 行そのものを押すと編集フォームが開くので、ここでは伝播を止める。
-      const planBtn = isMultiDay(t)
+      const planBtn = canPlan(t)
         ? App.h('button', {
           class: 'secondary task-plan-btn',
           text: t.plan ? '行程表' : '行程表を作る',
@@ -465,6 +476,17 @@ Views.tasks = {
         listHost.appendChild(App.h('div', { class: 'status', text: 'タスクはまだありません。上の欄から追加してください。' }));
       }
     }
+
+    // 「戻る」は、フォームや行程表を開いているときはまずそれを閉じる。
+    // 予定を編集している途中にトップまで飛ばされると、一覧に戻るのに
+    // もう一度サイドバーを押すことになる。
+    App.beforeBack = () => {
+      const open = formHost.firstChild || planHost.firstChild;
+      if (!open) return false;
+      closeForm();
+      closePlan();
+      return true;
+    };
 
     await refresh();
 

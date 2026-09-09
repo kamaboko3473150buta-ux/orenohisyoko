@@ -1,5 +1,5 @@
 // src/main/planner/prompt.js
-// 複数日にわたる予定（旅行・出張）の行程表を作らせるプロンプトと、その読み取り。
+// 予定（旅行・出張・終日の会議など）の行程表を作らせるプロンプトと、その読み取り。
 // Electronにもネットワークにも依存しない純粋な処理。
 //
 // **出力の日付の見出しは形を固定する。**
@@ -53,38 +53,62 @@ function formatDayHeading(ymd) {
   return `【${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}（${WEEKDAYS[d.getDay()]}）】`;
 }
 
-// 2日以上にわたる予定か。行程表を作るのはこれが true のときだけ。
-function isMultiDay(task) {
+// その予定が何日ぶんか。
+// 開始日と終了日の両方があれば期間、片方だけならその1日ぶん。
+// 1日で終わる予定にも行程表は要る（終日の会議・イベントなど）ので、
+// 複数日には限らない。
+function taskDays(task) {
   const t = task || {};
-  return dayList(t.start, t.end).length >= 2;
+  if (isYmd(t.start) && isYmd(t.end)) return dayList(t.start, t.end);
+  if (isYmd(t.start)) return [t.start];
+  if (isYmd(t.end)) return [t.end];
+  return [];
+}
+
+// 行程表を作れる予定か。日付がまったく無いものだけを除く。
+function canPlan(task) {
+  return taskDays(task).length >= 1;
 }
 
 // system は毎回まったく同じにする（プロンプトキャッシュが前方一致で効くように）。
 function buildPlanSystemPrompt() {
   return [
-    'あなたは秘書として、旅行や出張の行程表を作るアシスタントです。',
+    'あなたは秘書として、予定の行程表を立てるアシスタントです。',
+    '',
+    'あなたの仕事は、決まっていることを書き写すことではありません。',
+    '**決まっていないところを埋める案を出すこと**が仕事です。',
     '',
     '守ること:',
     '- 渡された決まっていることは必ず守る。勝手に日時や場所を変えない',
-    '- 決まっていないところは、無理に埋めずに「未定」と書く',
-    '- 交通機関の便名・料金・営業時間など、**調べないと分からないことは書かない**',
-    '  （もっともらしい嘘を書くより、空けておくほうが役に立つ）',
-    '- 移動・食事・休憩の時間も入れて、詰め込みすぎない',
+    '- 決まっていないところは「未定」で済ませず、**目的から考えて案を出す**。',
+    '  時間の使い方・回る順番・どこで何をするかまで踏み込んでよい',
+    '- ただし**調べないと分からない事実は書かない**（便名・料金・営業時間・住所・電話番号）。',
+    '  もっともらしい数字を書くと、その場で困るのは利用者本人。',
+    '  代わりに「朝の便を押さえる」のように、やることとして書く',
+    '- 移動・食事・休憩・予備の時間を入れる。詰め込みすぎない',
+    '- 前後に準備や後片付けが要るなら、最初と最後の日に入れる',
+    '- 案には短い理由を添えてよい（「移動で疲れるので初日は軽めに」など）',
     '',
     '出力の形:',
     '- 1日ごとに「【2026/9/15（月）】」の見出しを立て、その下に「・」の箇条書き',
     '- 見出しの形は1文字も変えない（アプリがその日ぶんだけを取り出すため）',
     '- 各行は「・09:00 松山空港発」のように、時刻を先に書く。時刻が決まらない行は時刻を省く',
     '- 渡された日付をすべて出す。前置き・あいさつ・締めの言葉は書かない',
+    '- 最後に「【備考】」の見出しを立て、決めておくべきこと・確認が要ることを',
+    '  箇条書きにする（予約が要るもの、先方に聞くこと、持ち物など）',
   ].join('\n');
 }
 
 function buildPlanUserPrompt({ task, given } = {}) {
   const t = task || {};
-  const days = dayList(t.start, t.end);
+  const days = taskDays(t);
+  // 期間は日付が片方しか無いこともある（1日で終わる予定）。その日を1つだけ書く。
+  const period = days.length >= 2
+    ? `${days[0]} 〜 ${days[days.length - 1]}（${days.length}日間）`
+    : (days[0] || '（日付が読み取れませんでした）');
   const lines = [
     `【予定名】${clean(t.title) || '(無題)'}`,
-    `【期間】${clean(t.start)} 〜 ${clean(t.end)}（${days.length}日間）`,
+    `【期間】${period}`,
   ];
   if (clean(t.who)) lines.push(`【同行者・相手】${clean(t.who)}`);
   if (clean(t.at)) lines.push(`【開始時刻】${clean(t.at)}`);
@@ -99,6 +123,7 @@ function buildPlanUserPrompt({ task, given } = {}) {
   lines.push(days.map(formatDayHeading).join('\n') || '（期間が読み取れませんでした）');
   lines.push('');
   lines.push('上記の見出しをすべて使い、日ごとの行程を作ってください。');
+  lines.push('決まっていないところは、あなたの案で埋めてください。');
   return lines.join('\n');
 }
 
@@ -122,8 +147,9 @@ module.exports = {
   WEEKDAYS,
   isYmd,
   dayList,
+  taskDays,
   formatDayHeading,
-  isMultiDay,
+  canPlan,
   buildPlanSystemPrompt,
   buildPlanUserPrompt,
   extractDay,

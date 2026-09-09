@@ -21,7 +21,8 @@ const { addUsage } = require('../usage');
 const PARSE_MAX_TOKENS = 300;
 const BRIEF_MAX_TOKENS = 400;
 // 行程表は日数ぶんの箇条書きになるので、ここだけは長めに取る。
-const PLAN_MAX_TOKENS = 2500;
+// 案まで出させるぶん長くなるので、少し余裕を持たせる。
+const PLAN_MAX_TOKENS = 3000;
 
 // 'YYYY-MM-DD'（ローカル日付）。tasks.js の due と同じ形式・同じ基準（ローカル時刻）で揃える。
 function todayYmd(now = new Date()) {
@@ -88,17 +89,17 @@ function register({ getSettings, getTasks, saveTasks, getUsage, saveUsage }) {
     return { ok: true, task, failed };
   });
 
-  // 複数日にわたる予定の行程表を作る。**ここでは保存しない。**
+  // 予定の行程表を作る。**ここでは保存しない。**
   // 誤った行程をそのまま予定に入れてしまわないよう、画面で確認してから
   // 改めて task:update で保存させる（AI取り込みと同じ考え方）。
   ipcMain.handle('task:plan', async (_e, { id, given, model } = {}) => {
     const task = readTasks().find((t) => t && t.id === id);
     if (!task) return { ok: false, code: 'not_found', message: 'その予定が見つかりませんでした。' };
-    if (!planner.isMultiDay(task)) {
+    if (!planner.canPlan(task)) {
       return {
         ok: false,
-        code: 'single_day',
-        message: '行程表は、開始日と終了日が違う予定にだけ作れます。',
+        code: 'no_date',
+        message: '行程表を作るには、日付（開始日か終了日）が要ります。',
       };
     }
 
