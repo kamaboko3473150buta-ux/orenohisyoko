@@ -64,6 +64,9 @@ function hueDist(a, b) {
 //   肌 H=22〜23  S=0.76〜0.86 L=0.79〜0.82
 // 色相はどちらも橙寄りで近いが、**明度と彩度でくっきり分かれる**。
 const RULES = {
+  // lMax を 0.52 から上げてある。艶の明るいところが範囲から外れ、
+  // **色を変えたときに暗い斑点として残っていた**（穴埋めでも拾いきれなかった）。
+  // 肌は L=0.79〜0.82 なので 0.70 でも巻き込まない。
   hair: {
     hue: 10, hueTol: 45, sMin: 0.12, sMax: 0.62, lMin: 0.04, lMax: 0.52,
   },
@@ -288,8 +291,8 @@ function removeFaceFeatures(img, mask, skin, opts = {}) {
   // （白目は肌と同じ明るさ、キャッチライトは見つかったり見つからなかったり、
   // 「暗い行」は前髪を拾う）。同じ人物・同じ絵柄なので、
   // **顔の中での比率で決め打ちするほうが確実**だった。
-  // 眉毛もこの帯に入るので髪色には追従しなくなるが、
-  // 絵によって片方だけ追従するより揃っていて自然。
+  // 帯の上端は眉毛より下に置く。眉毛は髪色に追従させたいので帯に入れない
+  // （入れると絵によって追従したりしなかったりで揃わなかった）。
   let bx0 = W; let bx1 = 0; let by0 = H; let by1 = 0;
   for (const p of face) {
     const x = p % W; const y = (p - x) / W;
@@ -297,14 +300,25 @@ function removeFaceFeatures(img, mask, skin, opts = {}) {
     if (y < by0) by0 = y; if (y > by1) by1 = y;
   }
   const fh = by1 - by0; const fw = bx1 - bx0;
-  const band = opts.eyeBand || [0.15, 0.42];
+  const band = opts.eyeBand || [0.25, 0.46];
   const ey0 = Math.round(by0 + fh * band[0]);
   const ey1 = Math.round(by0 + fh * band[1]);
   const ex0 = Math.round(bx0 - fw * 0.06);
   const ex1 = Math.round(bx1 + fw * 0.06);
+  // 帯を四角く抜くと、**帯の中の前髪まで色が変わらなくなる**（顔を横切る茶色い帯が出た）。
+  // 帯の中では「左右どちらにも肌がある画素」だけを外す。
+  //   目・まつ毛 … 顔の内側なので、左右どちらにも肌がある
+  //   こめかみの髪 … 外側は肌ではないので残る
   const eyes = new Uint8Array(W * H);
   for (let y = Math.max(0, ey0); y <= Math.min(H - 1, ey1); y++) {
-    for (let x = Math.max(0, ex0); x <= Math.min(W - 1, ex1); x++) eyes[y * W + x] = 1;
+    for (let x = Math.max(0, ex0); x <= Math.min(W - 1, ex1); x++) {
+      let left = false;
+      for (let xx = x - 1; xx >= Math.max(0, ex0); xx--) if (faceMask[y * W + xx]) { left = true; break; }
+      if (!left) continue;
+      let right = false;
+      for (let xx = x + 1; xx <= Math.min(W - 1, ex1); xx++) if (faceMask[y * W + xx]) { right = true; break; }
+      if (right) eyes[y * W + x] = 1;
+    }
   }
 
   // 顔の外側から届かない場所＝顔に囲まれた窪み
@@ -507,7 +521,35 @@ function extract(img, opts = {}) {
   // 色で分かれるならそちらのほうが素直（ボブの2枚は
   // 髪 H=339〜356 / L<=0.20、机 H=19〜26 / L>=0.33 とはっきり分かれていた）。
   const hairRule = { ...RULES.hair, ...(opts.hairRule || {}) };
-  const hairRaw = buildMask(img, hairRule);
+
+  // **明度の上限は、顔の中と外で変える。**
+  // 上限を上げると艶の明るいところまで拾えて、色を変えたときの暗い斑点が消える。
+  // ところが顔の中で上げると、まつ毛のまわりの明るい部分まで入って**目が染まる**。
+  // 外は緩く（艶を拾う）、顔の中は厳しく（目を守る）。
+  const wide = { ...hairRule, lMax: Math.max(hairRule.lMax, 0.70) };
+  const hairRaw = buildMask(img, wide);
+  const strict = buildMask(img, hairRule);
+  {
+    // 顔の箱は肌の範囲から取る（この時点ではまだ髪を引いていない素の肌）
+    const skinPre = buildMask(img, RULES.skin);
+    for (let p = 0; p < skinPre.length; p++) if (!skinRoi[p]) skinPre[p] = 0;
+    let face = null;
+    for (const px of components(img, skinPre, null)) if (!face || px.length > face.length) face = px;
+    if (face) {
+      let fx0 = img.width; let fx1 = 0; let fy0 = img.height; let fy1 = 0;
+      for (const p of face) {
+        const x = p % img.width; const y = (p - x) / img.width;
+        if (x < fx0) fx0 = x; if (x > fx1) fx1 = x;
+        if (y < fy0) fy0 = y; if (y > fy1) fy1 = y;
+      }
+      for (let y = fy0; y <= fy1; y++) {
+        for (let x = fx0; x <= fx1; x++) {
+          const p = y * img.width + x;
+          if (hairRaw[p] && !strict[p]) hairRaw[p] = 0;
+        }
+      }
+    }
+  }
   for (let p = 0; p < hairRaw.length; p++) if (!roi[p]) hairRaw[p] = 0;
   // 「ここは髪ではない」と分かっている場所を外す。
   // 箱で囲うだけだと、机を切ろうとして毛先まで落ちることがある
