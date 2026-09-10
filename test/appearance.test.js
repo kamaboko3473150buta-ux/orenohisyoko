@@ -19,27 +19,39 @@ test('髪型のidはASCII（フォルダ名になるため）', () => {
     assert.match(s.id, /^[a-z0-9-]+$/, `${s.label} のidがフォルダ名に使えない`);
     assert.ok(s.label, 'ラベルが無い');
   }
-  for (const c of a.HAIR_COLORS) {
-    assert.match(c.id, /^[a-z0-9-]+$/);
+  // 色はフォルダ名にならないので、idの決まりは無い（「そのまま」は空）
+});
+
+test('保存された髪型は一覧にあるものだけに直す', () => {
+  assert.strictEqual(a.normalizeAppearance({ hairStyle: 'straight-long' }).hairStyle, 'straight-long');
+  // 知らない値・壊れた値は既定に倒す（画像の無いフォルダを見に行かせない）
+  assert.strictEqual(a.normalizeAppearance({ hairStyle: 'no-such' }).hairStyle, 'bob');
+  assert.strictEqual(a.normalizeAppearance(null).hairStyle, 'bob');
+  assert.strictEqual(a.normalizeAppearance('こわれた').hairStyle, 'bob');
+});
+
+test('フォルダは髪型だけで決まる（色で分けない）', () => {
+  // 色は絵を分けず、描くときにマスクの範囲だけ色相をずらす。
+  // だから色を増やしてもフォルダも画像も増えない。
+  assert.strictEqual(a.folderFor({ hairStyle: 'bob' }), 'bob');
+  assert.strictEqual(a.folderFor({ hairStyle: 'straight-long', hairColor: '#c96b93' }), 'straight-long');
+  assert.strictEqual(a.folderFor({}), 'bob');
+});
+
+test('色は #rrggbb だけを受け付け、それ以外は「そのまま」にする', () => {
+  const ok = a.normalizeAppearance({ hairColor: '#C96B93', skinColor: '#c98a5e' });
+  assert.strictEqual(ok.hairColor, '#c96b93', '大文字は小文字にそろえる');
+  assert.strictEqual(ok.skinColor, '#c98a5e');
+  for (const bad of ['red', '#abc', 'c96b93', '', null, 123, {}]) {
+    assert.strictEqual(a.normalizeAppearance({ hairColor: bad }).hairColor, '', String(bad));
   }
 });
 
-test('保存された値は一覧にあるものだけに直す', () => {
-  assert.deepStrictEqual(
-    a.normalizeAppearance({ hairStyle: 'straight-long', hairColor: 'brown' }),
-    { hairStyle: 'straight-long', hairColor: 'brown' },
-  );
-  // 知らない値・壊れた値は既定に倒す（画像の無いフォルダを見に行かせない）
-  assert.deepStrictEqual(a.normalizeAppearance({ hairStyle: 'no-such' }), { hairStyle: 'bob', hairColor: 'brown' });
-  assert.deepStrictEqual(a.normalizeAppearance(null), { hairStyle: 'bob', hairColor: 'brown' });
-  assert.deepStrictEqual(a.normalizeAppearance('こわれた'), { hairStyle: 'bob', hairColor: 'brown' });
-});
-
-test('既定の髪色なら、フォルダ名は髪型だけ', () => {
-  // 今ある assets/hishoko/bob と straight-long がこの形。
-  assert.strictEqual(a.folderFor({ hairStyle: 'bob', hairColor: 'brown' }), 'bob');
-  assert.strictEqual(a.folderFor({ hairStyle: 'straight-long', hairColor: 'brown' }), 'straight-long');
-  assert.strictEqual(a.folderFor({}), 'bob');
+test('見本の色はすべて #rrggbb か空', () => {
+  for (const c of a.HAIR_COLORS.concat(a.SKIN_COLORS)) {
+    assert.ok(c.hex === '' || /^#[0-9a-f]{6}$/.test(c.hex), `${c.label} の色がおかしい`);
+    assert.ok(c.label, 'ラベルが無い');
+  }
 });
 
 test('選べる見た目のフォルダに、実際に画像が入っている', () => {
@@ -48,7 +60,7 @@ test('選べる見た目のフォルダに、実際に画像が入っている',
   const path = require('node:path');
   const root = path.join(__dirname, '..', 'assets');
   for (const style of a.HAIR_STYLES) {
-    const folder = a.folderFor({ hairStyle: style.id, hairColor: a.DEFAULT_COLOR });
+    const folder = a.folderFor({ hairStyle: style.id });
     const faces = fs.readdirSync(path.join(root, 'hishoko', folder));
     for (const key of a.EXPRESSIONS) {
       assert.ok(faces.some((f) => f.startsWith(`${key}.`)), `${style.label}: 丸枠の ${key} が無い`);

@@ -13,6 +13,8 @@ window.Look = (function () {
   const EXTENSIONS = ['jpg', 'png'];
 
   let folder = DEFAULT_FOLDER;
+  // 髪と肌の色（#rrggbb）。空なら元の色のまま。
+  let colors = { hair: '', skin: '' };
   // 息抜きの卓の置き方（scripts/measure-scene.js の採寸結果）。
   // 見た目ごとに頭の位置が違うので、共通の値だとどれかの髪型で頭が切れる。
   let framing = {};
@@ -22,6 +24,11 @@ window.Look = (function () {
   // 見た目を1つ足すのに12枚の絵が要る。1枚足りないだけでその見た目が
   // 使いものにならないと、少しずつ作っていけない。
   function setImage(img, dir, name) {
+    // **呼ばれた時点の色を控える。**
+    // 候補の切り替え（.jpg が無ければ .png）は読み込み失敗のあとに起きるので、
+    // そのときに colors を読むと、もう別の値に戻っていることがある
+    // （美容室の見本は、描いたあとすぐ元の色に戻すため）。
+    const useColors = { ...colors };
     const tries = [];
     for (const ext of EXTENSIONS) tries.push(`../../assets/${dir}/${folder}/${name}.${ext}`);
     if (folder !== DEFAULT_FOLDER) {
@@ -33,9 +40,16 @@ window.Look = (function () {
       if (i >= tries.length) { img.style.display = 'none'; return; }
       const url = tries[i];
       i += 1;
-      img.src = url;
+      img.dataset.want = url;
+      // 色を変えないときは元のURLがそのまま返る（作り直しは起きない）。
+      Tint.url(url, useColors).then((finalUrl) => {
+        // 途中で別の絵に差し替えられていたら、古い結果は捨てる
+        if (img.dataset.want !== url) return;
+        img.src = finalUrl;
+      });
     }
-    img.onerror = next;
+    // 読み込みに失敗したら次の候補へ。色を変えた絵はデータURLなので失敗しない。
+    img.onerror = () => { if (img.src.startsWith('data:')) return; next(); };
     img.style.display = '';
     next();
   }
@@ -43,12 +57,13 @@ window.Look = (function () {
   // 背景（CSSのbackground-image）は読み込みの失敗を拾えないので、
   // 先に Image で試してから貼る。
   function resolveUrl(dir, name, ext = 'jpg') {
+    const useColors = { ...colors };
     return new Promise((resolve) => {
       const tries = [`../../assets/${dir}/${folder}/${name}.${ext}`];
       if (folder !== DEFAULT_FOLDER) tries.push(`../../assets/${dir}/${DEFAULT_FOLDER}/${name}.${ext}`);
       let i = 0;
       const probe = new Image();
-      probe.onload = () => resolve(tries[i - 1]);
+      probe.onload = () => { Tint.url(tries[i - 1], useColors).then(resolve); };
       probe.onerror = () => { if (i < tries.length) probe.src = tries[i++]; else resolve(''); };
       probe.src = tries[i++];
     });
@@ -57,16 +72,21 @@ window.Look = (function () {
   return {
     DEFAULT_FOLDER,
     folder: () => folder,
-    // 設定から読んだ見た目を覚える。髪色が既定ならフォルダ名は髪型だけ
-    // （main側の folderFor と同じ決まり。ここを変えるなら両方直すこと）。
+    // 設定から読んだ見た目を覚える。
+    // **フォルダは髪型だけで決まる。** 色は絵を分けず、描くときに変えるので
+    // フォルダ名には入れない（main側の folderFor と同じ決まり）。
     set(appearance) {
-      const a = appearance || {};
-      const style = a.hairStyle || DEFAULT_FOLDER;
-      folder = (!a.hairColor || a.hairColor === 'brown') ? style : `${style}-${a.hairColor}`;
+      folder = (appearance && appearance.hairStyle) || DEFAULT_FOLDER;
       return folder;
     },
     // 見本を描くときだけ一時的に切り替えて、すぐ元に戻すために使う。
     setFolder(name) { folder = name || DEFAULT_FOLDER; return folder; },
+    // 髪・肌の色（#rrggbb）。空文字なら元の色のまま。
+    setColors(next) {
+      colors = { hair: (next && next.hair) || '', skin: (next && next.skin) || '' };
+      return colors;
+    },
+    colors: () => colors,
     setFraming(all) { framing = (all && typeof all === 'object') ? all : {}; },
     // その見た目・その場面の置き方。無ければ null（CSSの既定のまま）。
     framing(mood) {

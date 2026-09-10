@@ -1179,6 +1179,34 @@ body.game-view main {
   color: #fff;
 }
 
+/* 色見本。押すとその色になる。「そのまま」だけ文字を出す。 */
+.salon-swatch {
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid var(--line-strong);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel);
+}
+.salon-swatch:hover { border-color: var(--accent); }
+.salon-swatch.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+.salon-swatch-none { width: auto; padding: 0 10px; }
+
+.salon-picker-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.salon-picker {
+  width: 56px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
 /* 表情の見本。丸枠と同じ切り抜き方（円）で出さないと、
    実際に画面へ出たときの見え方と食い違う。 */
 .salon-preview { display: flex; flex-wrap: wrap; gap: 10px; }

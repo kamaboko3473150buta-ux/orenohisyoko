@@ -2,7 +2,10 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';" />
+  <!-- img-src に data: を足しているのは、髪色・肌色を変えた絵を canvas で作って
+       表示するため（tint.js）。data: の画像は絵でしかなく、スクリプトは動かない。
+       通信は default-src 'self' のままなので、外へ出ていく口は増えない。 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline';" />
   <title>俺の秘書子</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -56,6 +59,7 @@
   <script src="views/tasks.js"></script>
   <script src="views/docgen.js"></script>
   <script src="views/translate.js"></script>
+  <script src="tint.js"></script>
   <script src="look.js"></script>
   <script src="news-lines.js"></script>
   <script src="today.js"></script>

@@ -212,6 +212,10 @@ for (const btn of App.sidebarItems) {
     const s = await window.hishoko.getSettings();
     if (window.Look) {
       Look.set(s.appearance);
+      Look.setColors({
+        hair: (s.appearance || {}).hairColor,
+        skin: (s.appearance || {}).skinColor,
+      });
       const meta = await window.hishoko.appearanceList();
       Look.setFraming(meta.framing);
     }

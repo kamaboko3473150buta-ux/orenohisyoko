@@ -134,6 +134,7 @@ function registerCommonHandlers() {
   ipcMain.handle('appearance:list', () => ({
     styles: appearance.HAIR_STYLES,
     colors: appearance.HAIR_COLORS,
+    skinColors: appearance.SKIN_COLORS,
     expressions: appearance.EXPRESSIONS,
     defaultFolder: appearance.folderFor({}),
     // 息抜きの卓の置き方も渡す。見た目ごとに違うので、画面側で持てない。
