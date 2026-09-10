@@ -113,19 +113,47 @@ function readIn() {
       if (r > 150 && g < 110 && b < 110) painted[p] = 1;
       else if (g > 150 && r < 110 && b < 110) painted[p] = 2;
     }
-    // **塗った範囲の中で、色の判定に合う画素だけを採る。**
-    // これで輪郭は元の絵に沿い、塗りのはみ出しは無視される。
+    // 塗った範囲を、**内側と縁で扱い分ける。**
+    //
+    // 内側 … 塗りを信じてほぼそのまま採る。線画は真っ黒に近く彩度も無いので、
+    //        色の判定に通すと落ちてしまい、**線のまわりだけ色が変わらない**。
+    //        線も髪の一部なので、色相を回してやったほうが自然に見える。
+    // 縁   … 色の判定で絞る。ここで輪郭が元の絵に沿い、塗りのはみ出しが消える。
+    //        だから塗りは大雑把でよい。
+    const hairPaint = new Uint8Array(painted.length);
+    const skinPaint = new Uint8Array(painted.length);
+    for (let p = 0; p < painted.length; p++) {
+      if (painted[p] === 1) hairPaint[p] = 1;
+      else if (painted[p] === 2) skinPaint[p] = 1;
+    }
+    const edge = Math.max(2, Math.round(img.width / 160));
+    const hairInner = lib.grow(img, hairPaint, edge, false);
+    const skinInner = lib.grow(img, skinPaint, edge, false);
+
     const hairRaw = lib.buildMask(img, lib.RULES.hair);
     const wide = lib.buildMask(img, { ...lib.RULES.hair, lMax: 0.78, sMin: 0.06 });
     const skinRaw = lib.buildMask(img, { ...lib.RULES.skin, lMin: 0.45, sMin: 0.30 });
+    // 内側でも、これだけは採らない（塗りが多少ずれても壊れないように）。
+    const skinStrict = lib.buildMask(img, lib.RULES.skin);
+    const isLightBack = (p) => {
+      const i = p * 4;
+      const [, s, l] = lib.rgbToHsl(img.data[i], img.data[i + 1], img.data[i + 2]);
+      return l > 0.72 && s < 0.30;   // 明るい壁・窓・白い服
+    };
+
     const out = new PNG({ width: img.width, height: img.height, colorType: 0 });
     let hair = 0; let skin = 0;
     for (let p = 0; p < painted.length; p++) {
       let v = 0;
-      // 髪は範囲を少し広めに見る（艶の明るいところまで拾う）。
-      // 塗りで場所が決まっているので、広げても他所へ漏れない。
-      if (painted[p] === 1 && (hairRaw[p] || wide[p])) { v = 1; hair++; }
-      else if (painted[p] === 2 && skinRaw[p]) { v = 2; skin++; }
+      if (hairPaint[p]) {
+        if (hairInner[p]) v = skinStrict[p] || isLightBack(p) ? 0 : 1;
+        else if (hairRaw[p] || wide[p]) v = 1;
+      } else if (skinPaint[p]) {
+        if (skinInner[p]) v = isLightBack(p) ? 0 : 2;
+        else if (skinRaw[p]) v = 2;
+      }
+      if (v === 1) hair++;
+      if (v === 2) skin++;
       out.data[p] = v;
     }
     const dest = path.join(ROOT, row.target).replace(/\.(png|jpg|jpeg)$/i, '.mask.png');
