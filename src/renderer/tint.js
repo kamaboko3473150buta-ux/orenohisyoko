@@ -66,10 +66,20 @@ window.Tint = (function () {
     return { canvas: c, ctx, data: ctx.getImageData(0, 0, c.width, c.height) };
   }
 
-  // その範囲の「平均の色」を目標色にそろえる。
+  // 「平均が目標の値になる」ように写す曲線を作る。
   //
-  // 色相を置き換えるだけだと、茶色から金髪にしたときに暗いままになる。
-  // 平均が目標色になるよう彩度と明度に倍率をかけると、選んだ色そのものに見える。
+  // **掛け算ではなく累乗にする。** 掛け算だと、暗い茶色（平均0.22）を
+  // 明るい桃色（0.60）にするとき2.7倍になり、艶の部分（0.65）が1.0を超えて
+  // **真っ白に飛ぶ**。累乗なら 0→0、1→1 を必ず通るので、どんな色でも飛ばない。
+  //   x^g で平均を写す ⇒ g = ln(目標) / ln(平均)
+  function gammaFor(mean, want) {
+    if (!(mean > 0.001 && mean < 0.999)) return 1;
+    if (!(want > 0.001 && want < 0.999)) return 1;
+    return Math.log(want) / Math.log(mean);
+  }
+
+  // その範囲の「平均の色」を目標色にそろえる。
+  // 色相は置き換え、彩度と明度は上の曲線で写すので、艶と陰影の差はそのまま残る。
   function applyOne(px, mask, want, markValue) {
     let sumS = 0; let sumL = 0; let n = 0;
     for (let p = 0; p < mask.length; p += 4) {
@@ -78,17 +88,12 @@ window.Tint = (function () {
       sumS += s; sumL += l; n++;
     }
     if (!n) return;
-    const meanS = sumS / n; const meanL = sumL / n;
-    const satScale = meanS > 0.02 ? want[1] / meanS : 1;
-    const lightScale = meanL > 0.02 ? want[2] / meanL : 1;
+    const gS = gammaFor(sumS / n, want[1]);
+    const gL = gammaFor(sumL / n, want[2]);
     for (let p = 0; p < mask.length; p += 4) {
       if (mask[p] !== markValue) continue;
       const [, s, l] = rgbToHsl(px[p], px[p + 1], px[p + 2]);
-      const [r, g, b] = hslToRgb(
-        want[0],
-        Math.max(0, Math.min(1, s * satScale)),
-        Math.max(0, Math.min(1, l * lightScale)),
-      );
+      const [r, g, b] = hslToRgb(want[0], s ** gS, l ** gL);
       px[p] = r; px[p + 1] = g; px[p + 2] = b;
     }
   }

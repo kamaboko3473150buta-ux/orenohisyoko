@@ -107,7 +107,10 @@
       0.05,
       0.7,
       0.8
-    ]
+    ],
+    "hairRule": {
+      "sMax": 0.4
+    }
   },
   "games/straight-long/scene-idle.jpg": {
     "hairRoi": [
@@ -157,7 +160,10 @@
       0,
       0.85,
       1
-    ]
+    ],
+    "hairRule": {
+      "lMax": 0.3
+    }
   },
   "hishoko/bob/trouble.png": {
     "hairRoi": [
@@ -165,6 +171,9 @@
       0,
       0.85,
       1
-    ]
+    ],
+    "hairRule": {
+      "lMax": 0.3
+    }
   }
 }

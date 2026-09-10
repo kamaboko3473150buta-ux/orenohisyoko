@@ -215,8 +215,15 @@ function fillShineHoles(img, mask, hairHue) {
   const holes = new Uint8Array(W * H);
   for (let p = 0; p < W * H; p++) if (!mask[p] && !outside[p]) holes[p] = 1;
 
+  // 艶は髪の中の小さな抜けでしかない。
+  // **大きすぎる穴は顔**（前髪・両側の髪・手に囲まれると顔ぜんぶが穴になる）。
+  // 肌は彩度も色相も髪に近いので、色では見分けられない。大きさで分ける。
+  const maskArea = mask.reduce((a, b) => a + b, 0);
+  const tooBig = Math.max(400, maskArea * 0.15);
+
   const out = Uint8Array.from(mask);
   for (const px of components(img, holes, null)) {
+    if (px.length > tooBig) continue;
     let ok = 0;
     for (const p of px) {
       const [h, s] = rgbToHsl(D[p * 4], D[p * 4 + 1], D[p * 4 + 2]);
@@ -225,6 +232,73 @@ function fillShineHoles(img, mask, hairHue) {
     }
     if (ok / px.length < 0.7) continue;
     for (const p of px) out[p] = 1;
+  }
+  return out;
+}
+
+// 目のあたりを髪の範囲から外す。
+//
+// まつげの線が前髪とつながっている絵では、侵食で切り離しきれず**虹彩が髪に入る**
+// （ボブの丸枠で片目だけ染まった）。虹彩は髪とまったく同じ暗い茶色なので、
+// 色では取り除けない。**目の白（強膜）を手がかりに位置を突き止める。**
+// 顔の位置は**肌の範囲から取る**。
+// 頭の幅の自動測定は、髪の先が細い絵だと実際よりずっと小さく出る
+// （丸枠で頭幅74pxと出たが、実際は250pxほどあった）。その値で顔の箱を作ると
+// 目のずっと上を見てしまい、何も見つからない。肌はもっと素直に取れる。
+function faceBox(img, skin) {
+  const { width: W, height: H } = img;
+  let best = null;
+  for (const px of components(img, skin, null)) {
+    if (!best || px.length > best.length) best = px;
+  }
+  if (!best) return null;
+  let x0 = W; let x1 = 0; let y0 = H; let y1 = 0;
+  for (const p of best) {
+    const x = p % W; const y = (p - x) / W;
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return { x0, x1, y0, y1 };
+}
+
+function removeEyes(img, mask, box) {
+  const { width: W, height: H, data: D } = img;
+  if (!box) return mask;
+  // 顔の上半分だけを見る。下半分まで見ると歯や白い襟を拾ってしまう。
+  const x0 = box.x0; const x1 = box.x1;
+  const y0 = box.y0;
+  const y1 = Math.round(box.y0 + (box.y1 - box.y0) * 0.62);
+
+  const white = new Uint8Array(W * H);
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * W + x) * 4;
+      const [, s, l] = rgbToHsl(D[i], D[i + 1], D[i + 2]);
+      if (l > 0.80 && s < 0.35) white[y * W + x] = 1;
+    }
+  }
+
+  const faceArea = Math.max(1, (x1 - x0 + 1) * (y1 - y0 + 1));
+  const faceW = x1 - x0 + 1;
+  // 見つかるのは**瞳のキャッチライト**（目に入った光の点）。
+  // 強膜（白目）はこの絵柄では少し色が付いていて、白としては拾えなかった。
+  // キャッチライトは数画素しかないので、大きさの下限を厳しくすると全部捨ててしまう。
+  const out = Uint8Array.from(mask);
+  for (const px of components(img, white, null)) {
+    if (px.length < 3 || px.length / faceArea > 0.06) continue;
+    let bx0 = W; let bx1 = 0; let by0 = H; let by1 = 0;
+    for (const p of px) {
+      const x = p % W; const y = (p - x) / W;
+      if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+      if (y < by0) by0 = y; if (y > by1) by1 = y;
+    }
+    // 光の点から虹彩ぜんたいを覆う。目の大きさは顔の幅に比例する。
+    // 縦を狭めにするのは、すぐ上にある眉毛を巻き込まないため（眉は髪色に合わせたい）。
+    const mx = Math.max(3, Math.round(faceW / 11));
+    const my = Math.max(3, Math.round(faceW / 15));
+    for (let y = Math.max(0, by0 - my); y <= Math.min(H - 1, by1 + my); y++) {
+      for (let x = Math.max(0, bx0 - mx); x <= Math.min(W - 1, bx1 + mx); x++) out[y * W + x] = 0;
+    }
   }
   return out;
 }
@@ -354,11 +428,25 @@ function extract(img, opts = {}) {
   // **絵の全体を見ると、木の机・背景の家具まで髪と同じ色で拾ってしまう。**
   // 頭の位置と大きさは測ってあるので、そこから人物の入る箱を作る。
   // 絵ごとの箱があればそれを使う。無ければ頭の位置から自動で作る。
-  const roi = opts.hairRoi ? boxRoi(img, opts.hairRoi) : insideRoi(img, top, hw);
-  const skinRoi = opts.skinRoi ? boxRoi(img, opts.skinRoi) : roi;
-  const hairRule = RULES.hair;
+  // **髪と肌は別々に決める。** 片方だけ指定したときにもう片方まで狭まると、
+  // 髪の机を切ったつもりで肌（首や胸元）まで落ちる。
+  const autoRoi = insideRoi(img, top, hw);
+  const roi = opts.hairRoi ? boxRoi(img, opts.hairRoi) : autoRoi;
+  const skinRoi = opts.skinRoi ? boxRoi(img, opts.skinRoi) : autoRoi;
+  // 絵ごとに判定を締められるようにする。
+  // 箱で切ろうとすると、机と髪が同じ高さにある絵では髪まで落ちて継ぎ目が出る。
+  // 色で分かれるならそちらのほうが素直（ボブの2枚は
+  // 髪 H=339〜356 / L<=0.20、机 H=19〜26 / L>=0.33 とはっきり分かれていた）。
+  const hairRule = { ...RULES.hair, ...(opts.hairRule || {}) };
   const hairRaw = buildMask(img, hairRule);
   for (let p = 0; p < hairRaw.length; p++) if (!roi[p]) hairRaw[p] = 0;
+  // 「ここは髪ではない」と分かっている場所を外す。
+  // 箱で囲うだけだと、机を切ろうとして毛先まで落ちることがある
+  // （横一線で切ったら、反対側の毛先が茶色のまま残った）。
+  for (const box of opts.hairExclude || []) {
+    const bad = boxRoi(img, box);
+    for (let p = 0; p < hairRaw.length; p++) if (bad[p]) hairRaw[p] = 0;
+  }
   const thin = grow(img, hairRaw, thinBy, false);
   const core = keepConnected(img, thin, seeds);
   const back = grow(img, core, thinBy + 1, true);
@@ -389,6 +477,9 @@ function extract(img, opts = {}) {
   for (let p = 0; p < skinRaw.length; p++) if (!skinRoi[p]) skinRaw[p] = 0;
   const skin = new Uint8Array(img.width * img.height);
   for (let p = 0; p < skin.length; p++) skin[p] = (skinRaw[p] && !hair[p]) ? 1 : 0;
+
+  // 目のあたりを髪から外す。顔の位置は肌の範囲から取る（自動測定より確か）。
+  hair = removeEyes(img, hair, faceBox(img, skin));
   return { hair, skin };
 }
 
