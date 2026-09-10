@@ -261,7 +261,76 @@ function faceBox(img, skin) {
   return { x0, x1, y0, y1 };
 }
 
-function removeEyes(img, mask, box) {
+// 顔の中の窪み（目・まつ毛・唇・小鼻・眉毛）を髪から外す。
+//
+// **目・まつ毛・眉毛は髪とまったく同じ暗い茶色**で、色では分けられない。
+// 白目も肌と同じ明るさ（L≒0.8）なので、白を手がかりにもできなかった。
+// キャッチライトを目印にする案も、絵によって見つかったり見つからなかったりで
+// 当てにならなかった。
+//
+// **確実なのは「顔に囲まれているかどうか」。**
+// 肌の範囲をひとつながりの面として見たとき、その内側にできる窪みが顔の造作にあたる。
+// ここを丸ごと外せば、目もまつ毛も唇も一度に片づく。
+// 眉毛も一緒に外れるので**眉は髪色に追従しなくなる**が、
+// 絵によって片方だけ追従する今の状態よりは揃っていて自然。
+function removeFaceFeatures(img, mask, skin, opts = {}) {
+  const { width: W, height: H } = img;
+  // 肌の一番大きな塊＝顔。手や首の肌は別の塊なので巻き込まない。
+  let face = null;
+  for (const px of components(img, skin, null)) if (!face || px.length > face.length) face = px;
+  if (!face) return mask;
+  const faceMask = new Uint8Array(W * H);
+  for (const p of face) faceMask[p] = 1;
+
+  // 目・まつ毛のある帯を丸ごと外す。
+  //
+  // 目の位置を絵から見つける手立ては、ことごとく当てにならなかった
+  // （白目は肌と同じ明るさ、キャッチライトは見つかったり見つからなかったり、
+  // 「暗い行」は前髪を拾う）。同じ人物・同じ絵柄なので、
+  // **顔の中での比率で決め打ちするほうが確実**だった。
+  // 眉毛もこの帯に入るので髪色には追従しなくなるが、
+  // 絵によって片方だけ追従するより揃っていて自然。
+  let bx0 = W; let bx1 = 0; let by0 = H; let by1 = 0;
+  for (const p of face) {
+    const x = p % W; const y = (p - x) / W;
+    if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+    if (y < by0) by0 = y; if (y > by1) by1 = y;
+  }
+  const fh = by1 - by0; const fw = bx1 - bx0;
+  const band = opts.eyeBand || [0.15, 0.42];
+  const ey0 = Math.round(by0 + fh * band[0]);
+  const ey1 = Math.round(by0 + fh * band[1]);
+  const ex0 = Math.round(bx0 - fw * 0.06);
+  const ex1 = Math.round(bx1 + fw * 0.06);
+  const eyes = new Uint8Array(W * H);
+  for (let y = Math.max(0, ey0); y <= Math.min(H - 1, ey1); y++) {
+    for (let x = Math.max(0, ex0); x <= Math.min(W - 1, ex1); x++) eyes[y * W + x] = 1;
+  }
+
+  // 顔の外側から届かない場所＝顔に囲まれた窪み
+  const outside = new Uint8Array(W * H);
+  const st = [];
+  for (let x = 0; x < W; x++) st.push(x, (H - 1) * W + x);
+  for (let y = 0; y < H; y++) st.push(y * W, y * W + W - 1);
+  while (st.length) {
+    const p = st.pop();
+    if (p < 0 || p >= W * H || outside[p] || faceMask[p]) continue;
+    outside[p] = 1;
+    const x = p % W;
+    if (x > 0) st.push(p - 1);
+    if (x < W - 1) st.push(p + 1);
+    st.push(p - W, p + W);
+  }
+
+  const out = Uint8Array.from(mask);
+  for (let p = 0; p < W * H; p++) {
+    if (!faceMask[p] && !outside[p]) out[p] = 0;   // 顔に囲まれた窪み（唇・小鼻）
+    if (eyes[p]) out[p] = 0;                       // 目とまつ毛の帯
+  }
+  return out;
+}
+
+function removeEyesOld(img, mask, box) {
   const { width: W, height: H, data: D } = img;
   if (!box) return mask;
   // 顔の上半分だけを見る。下半分まで見ると歯や白い襟を拾ってしまう。
@@ -478,8 +547,10 @@ function extract(img, opts = {}) {
   const skin = new Uint8Array(img.width * img.height);
   for (let p = 0; p < skin.length; p++) skin[p] = (skinRaw[p] && !hair[p]) ? 1 : 0;
 
-  // 目のあたりを髪から外す。顔の位置は肌の範囲から取る（自動測定より確か）。
-  hair = removeEyes(img, hair, faceBox(img, skin));
+  // 顔の中の窪み（目・まつ毛・唇）を髪から外す。
+  hair = removeFaceFeatures(img, hair, skin, opts);
+  // 髪から外したぶん、肌のほうも作り直す（境目の重なりを避ける）。
+  for (let p = 0; p < skin.length; p++) skin[p] = (skinRaw[p] && !hair[p]) ? 1 : 0;
   return { hair, skin };
 }
 
